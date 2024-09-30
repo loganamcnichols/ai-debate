@@ -1,0 +1,52 @@
+<style>
+  :root{
+    --main-layout: 
+    ". response-left response-left  response-left  .              ."
+    ". .             response-right response-right response-right ."
+    ". user-msg      user-msg       user-msg       user-mgg       .";
+
+  }
+
+  @media screen and (max-width: 1000) 
+  {
+    body
+    {
+      display: grid;
+      grid-template-columns: 2rem 1fr 1fr 1fr 1fr 2rem;
+      grid-template-areas: var(--main-layout);
+    }
+  }
+
+  @media screen and (min-width: 1000)
+  {
+    body
+    {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
+      grid-template-areas: var(--main-layout);
+    }
+  }
+
+  .response-left { grid-column: response-left; }
+  .response-right { grid-column: response-right; }
+  #question-bar { grid-column: usr-msg; }
+
+
+  html, body {
+    box-sizing: border-box;
+  }
+  * {
+    min-width: 0px;
+  }
+  .error-input
+  {
+    border: solid red 1px;
+  }
+  #question-bar
+  {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+  }
+</style>

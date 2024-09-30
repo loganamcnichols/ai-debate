@@ -1,0 +1,98 @@
+:root{
+    /* --main-layout: 
+    ". chat-row chat-row chat-row chat-row .";
+    --chat-row-layout:
+    "response-left response-left  response-left  ."
+    ".             response-right response-right response-right" */
+}
+
+  @media screen and (max-width: 1000px) 
+  {
+    .chat-area
+    {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding-bottom: 300px; /* Adjust this value to move messages higher */
+    }
+  }
+
+  @media screen and (min-width: 1000px)
+  {
+    .chat-area
+    {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+      overflow-y: scroll; /* Allows vertical scrolling */
+      height: calc(100vh - 20vh);/* Adjust '50px' to set the space from the bottom */
+      margin: 0% 25% 0% 25%;
+      box-sizing: border-box;
+    }
+  }
+
+  .chat-row       
+  { 
+    display: flex;
+    gap: 2rem;
+    flex-direction: column;
+  }
+
+  .response-left  { align-self: flex-start; width: 70%; border: solid 0.5px #DD6E42; border-radius: 20px; padding: 2rem;}
+  .response-right { align-self: flex-end;  width: 70%; border: solid 0.5px #374962; border-radius: 20px; padding: 2rem;}
+
+
+  html, body {
+    font-family: "Libre Franklin", sans-serif;
+    font-size: 24px;
+    background-color: #0F131A;
+    box-sizing: border-box;
+    color: #DEE4ED;
+  }
+  * {
+    min-width: 0px;
+  }
+  .error-input
+  {
+    border: solid red 1px;
+  }
+
+
+  #submission-form
+  {
+    position: fixed;
+    box-sizing: border-box;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 4rem 25% 4rem 25%
+  }
+
+  .textbar
+  {
+    background-color: #253141;
+    border-radius: 40px;
+    border: 2px solid black;
+  }
+
+  .textbar > textarea:disabled
+  {
+    opacity: 0.60;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    border: none;
+    outline: none;
+    background-color: transparent;
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.5;
+    resize: none;
+    padding: 1rem 2rem 1rem 2rem;
+    color: inherit;
+    margin: 0;
+  }
+
