@@ -7,97 +7,36 @@
   <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-
 <body>
-  <div class="chat-area">
-    {{ range $i, $val := .QuestionRows }}
-      <div class="user"></div>
-      {{ if or (and (eq (mod $i 2) 0) $.InnovationFirst) (and (ne (mod $i 2) 0) (not $.InnovationFirst)) }}
-        <div class="response-left">{{ $val.InnovationMsg }}</div>
-        <div class="response-right response-2">{{ $val.CautionMsg }}</div>
-      {{ else }}
-        <div class="response-right">{{ $val.CautionMsg }}</div>
-        <div class="response-left">{{ $val.InnovationMsg }}</div>
-      {{ end }}
-    {{ end }}
-  </div>
-  {{ if and (eq (mod (len .QuestionRows) 2) 0) .InnovationFirst }}
-    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation=left"
-          hx-post="/submit" hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-target=".chat-area" hx-swap="beforeend">
-      <div class="textbar">
-        <textarea name="user-msg" rows="1" 
-        _="on keydown[key is 'Enter' and no shiftkey] halt the event's default wait for 100ms set me.disabled to true
-           on input set my *height to my scrollHeight px"></textarea>
-      </div>
-    </form>
+  <main _="on scroll 
+            if my scrollTop + my clientHeight is greater than my scrollHeight - 100 
+              set userScrolling to true
+            otherwise 
+              set userScrolling to false
+            end
+           on htmx:sseMessage 
+            if no userScrolling set my scrollTop to my scrollHeight 
+            end
+           on htmx:sseClose send wakeUp to #user-input
+           on htmx:afterSettle set my scrollTop to my scrollHeight">
+  {{ range $i, $val := .QuestionRows }}
+  {{ if eq (mod $i 2) 0 }}
+    <p class="user-msg">{{ .UserMsg }}</p>
+    <div class="response-left">{{ .FirstResponse }}</div>
+    <div class="response-right">{{ .SecondResponse }}</div>
   {{ else }}
-    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation=right"
-          hx-post="/submit" hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-target=".chat-area" hx-swap="beforeend">
+    <p class="user-msg">{{ .UserMsg }}</p>
+    <div class="response-right">{{ .FirstResponse }}</div>
+    <div class="response-left">{{ .SecondResponse }}</div>
+  {{ end }}
+  {{ end }}
+    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
+          hx-post="/submit" hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" 
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
-           wait for 100ms 
-           set my.disabled to true
            on input set my *height to my scrollHeight px"></textarea>
       </div>
     </form>
-  {{ end }}
-<script>
-  function scrollToBottom() {
-    chatArea.scrollTop = chatArea.scrollHeight;
-  }
-  // Select the chat area element
-  const chatArea = document.querySelector('.chat-area');
-
-  // Variable to track if the user is scrolling up
-  let isUserScrollingUp = false;
-
-  // Event listener to detect user scroll
-  chatArea.addEventListener('scroll', () => {
-    const threshold = 100; // Pixels from the bottom to consider as "near the bottom"
-    const position = chatArea.scrollTop + chatArea.clientHeight;
-    const height = chatArea.scrollHeight;
-
-    if (position >= height - threshold) {
-      isUserScrollingUp = false;
-    } else {
-      isUserScrollingUp = true;
-    }
-  });
-  // Listen for the htmx:sseMessage event
-  document.body.addEventListener('htmx:sseClose', function(event){
-    console.log("got here");
-    textarea = document.getElementById("user-input");
-    form = document.getElementById("submission-form");
-    textarea.disabled = false;
-
-    // Get the current hx-post value
-    let hxPostValue = form.getAttribute('hx-post');
-
-    // Parse the URL and its parameters
-    let url = new URL(hxPostValue, 'http://example.com');
-    let params = new URLSearchParams(url.search);
-
-    // Change the orientation parameter to 'left'
-    if (params.get('orientation') == 'left') {
-      console.log("swapping orientation");
-      params.set('orientation', 'right');
-    } else {
-      console.log("swapping orientation");
-      params.set('orientation', 'left');
-    }
-
-    // Reconstruct the URL with the updated parameters
-    url.search = params.toString();
-
-    // Update the hx-post attribute, removing the base URL we added
-    form.setAttribute('hx-post', url.pathname + url.search);
-  })
-
-  document.body.addEventListener('htmx:sseMessage', (event) => {
-    if (!isUserScrollingUp) {
-      scrollToBottom();
-    }
-  });
-</script>
+  </main>
 </body>

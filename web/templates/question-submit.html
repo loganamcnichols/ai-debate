@@ -1,0 +1,17 @@
+<div hx-ext="sse" sse-connect="/chat-response?response-id={{ .ResponseID }}" sse-close="close" class="chat-row">
+  <p class="user-msg">{{ .UserMsg }}</p>
+  <div class="{{ .FirstResponse }}"></div>
+  <div class="sse-listener" style="height:0px;margin:0;padding:0;" sse-swap="first-response" hx-target="previous"></div>
+  <div class="{{ .SecondResponse }}"></div>
+  <div class="sse-listener" style="height:0px;margin:0;padding:0;" hx-ext="sse" 
+  sse-swap="second-response" hx-target="previous"></div>
+</div>
+<form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .SecondResponse }}"
+      hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom">
+  <div class="textbar">
+    <textarea name="user-msg" id="user-input" rows="1" disabled
+    _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
+        on input set my *height to my scrollHeight px
+        on wakeUp remove @disabled"></textarea>
+  </div>
+</form>

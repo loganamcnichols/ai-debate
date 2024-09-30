@@ -1,8 +1,0 @@
-<div hx-ext="sse" sse-connect="/chat-response?response-id={{ . }}&response-number=1" sse-close="close" class="chat-row">
-  <div class="response-right response-1"></div>
-  <div class="sse-listener" style="height:0px;" 
-  sse-swap="first-response" hx-target="previous" hx-swap="innerHTML scroll:bottom"></div>
-  <div class="response-left response-2"></div>
-  <div class="sse-listener" style="height:0px;" hx-ext="sse" 
-  sse-swap="second-response" hx-target="previous" hx-swap="innerHTML scroll:bottom"></div>
-</div>

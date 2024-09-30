@@ -27,6 +27,12 @@ type QuestionRow struct {
 	InnovationMsg string
 }
 
+type SortedResponses struct {
+	UserMsg        string
+	FirstResponse  string
+	SecondResponse string
+}
+
 var client *claude.Client
 var tmpls *template.Template
 var db *sql.DB
@@ -34,7 +40,7 @@ var db *sql.DB
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	idParam := params.Get("response-id")
-	orientation := params.Get("orientation")
+	topOrientation := params.Get("orientation")
 	responseID, err := uuid.Parse(idParam)
 	if err != nil {
 		log.Printf("unable to parse uuid: %v\n", err)
@@ -59,11 +65,29 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if orientation == "left" {
-		tmpls.ExecuteTemplate(w, "question-submit-left.html", responseID)
+	var firstResponse string
+	var secondResponse string
+	if topOrientation == "response-left" {
+		firstResponse = "response-left"
+		secondResponse = "response-right"
 	} else {
-		tmpls.ExecuteTemplate(w, "question-submit-right.html", responseID)
+		firstResponse = "response-right"
+		secondResponse = "response-left"
 	}
+
+	tmpls.ExecuteTemplate(w, "question-submit.html", struct {
+		OrientationTop string
+		FirstResponse  string
+		SecondResponse string
+		UserMsg        string
+		ResponseID     string
+	}{
+		OrientationTop: topOrientation,
+		FirstResponse:  firstResponse,
+		SecondResponse: secondResponse,
+		UserMsg:        userMsg,
+		ResponseID:     responseID.String(),
+	})
 }
 
 func convertToParagraphs(text string) string {
@@ -120,9 +144,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	var messages []claude.MessageParam
 	var questionID int
 	var formattedQuestion, formattedTransition, firstAnswer, secondAnswer string
-	var nextRow QuestionRow
 
 	for rows.Next() {
+		var nextRow QuestionRow
 		rows.Scan(&questionID, &nextRow.ResponseID, &nextRow.UserMsg, &nextRow.CautionMsg, &nextRow.InnovationMsg)
 		if innovateFirst {
 			formattedQuestion = fmt.Sprintf("The user asks '%s'. The innovation team will respond first.", nextRow.UserMsg)
@@ -135,7 +159,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			firstAnswer = nextRow.CautionMsg
 			secondAnswer = nextRow.InnovationMsg
 		}
-		if nextRow.CautionMsg == "" || nextRow.InnovationMsg == "" {
+		if firstAnswer == "" || secondAnswer == "" {
 			break
 		}
 
@@ -147,31 +171,27 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		innovateFirst = !innovateFirst
 	}
 
-	var firstSystemPrompt []byte
-	var secondSystemPrompt []byte
+	var firstPromptFile string
+	var secondPromptFile string
 	if innovateFirst {
-		firstSystemPrompt, err = os.ReadFile("PRO_INNOVATION_PROMPT.txt")
-		if err != nil {
-			log.Printf("unable to read innovation prompt: %v", err)
-		}
-		secondSystemPrompt, err = os.ReadFile("PRO_CAUTION_PROMPT.txt")
-		if err != nil {
-			log.Printf("unable to read caution prompt: %v", err)
-		}
+		firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
+		secondPromptFile = "PRO_CAUTION_PROMPT.txt"
 	} else {
-		firstSystemPrompt, err = os.ReadFile("PRO_CAUTION_PROMPT.txt")
-		if err != nil {
-			log.Printf("unable to read caution prompt: %v", err)
-		}
-		secondSystemPrompt, err = os.ReadFile("PRO_INNOVATION_PROMPT.txt")
-		if err != nil {
-			log.Printf("unable to read innovation prompt: %v", err)
-		}
+		firstPromptFile = "PRO_CAUTION_PROMPT.txt"
+		secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
+	}
+
+	firstSystemPrompt, err := os.ReadFile(firstPromptFile)
+	if err != nil {
+		log.Printf("unable to read innovation prompt: %v", err)
+	}
+	secondSystemPrompt, err := os.ReadFile(secondPromptFile)
+	if err != nil {
+		log.Printf("unable to read caution prompt: %v", err)
 	}
 
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedQuestion)))
 
-	var firstMessageContent string
 	stream := client.Messages.NewStreaming(context.TODO(), claude.MessageNewParams{
 		Model:     claude.F(claude.ModelClaude_3_5_Sonnet_20240620),
 		MaxTokens: claude.Int(1024),
@@ -183,17 +203,16 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		switch delta := event.Delta.(type) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
-				firstMessageContent += delta.Text
-				fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstMessageContent))
+				firstAnswer += delta.Text
+				fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
 				flusher.Flush()
 			}
 		}
 	}
 
-	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstMessageContent)))
+	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
 
-	var secondMessageContent string
 	stream = client.Messages.NewStreaming(context.TODO(), claude.MessageNewParams{
 		Model:     claude.F(claude.ModelClaude_3_5_Sonnet_20240620),
 		MaxTokens: claude.Int(1024),
@@ -205,32 +224,26 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		switch delta := event.Delta.(type) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
-				secondMessageContent += delta.Text
-				fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondMessageContent))
+				secondAnswer += delta.Text
+				fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
 				flusher.Flush()
 			}
 		}
 	}
 	fmt.Fprint(w, "event: success\ndata: success\n\n")
-
 	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
 
+	var updateCmd string
 	if innovateFirst {
-		update := `UPDATE chat SET innovation_msg = $1 caution_msg = $2 WHERE id = $3;`
-		_, err = db.Exec(update, firstMessageContent, secondMessageContent, questionID)
-		if err != nil {
-			log.Printf("error executing update %s: %v", update, err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
+		updateCmd = "UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3;"
 	} else {
-		update := `UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3`
-		_, err := db.Exec(update, secondMessageContent, firstMessageContent, questionID)
-		if err != nil {
-			log.Printf("error executing update %s: %v\n", update, err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
+		updateCmd = "UPDATE chat SET caution_msg = $1, innovation_msg = $2 WHERE id = $3;"
+	}
+	_, err = db.Exec(updateCmd, firstAnswer, secondAnswer, questionID)
+	if err != nil {
+		log.Printf("error executing update %s: %v", updateCmd, err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -289,22 +302,42 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	var questionRows []QuestionRow
+	var questionsOut []SortedResponses
 	for res.Next() {
 		var nextRow QuestionRow
 		res.Scan(&nextRow.QuestionID, &nextRow.ResponseID, &nextRow.UserMsg,
 			&nextRow.CautionMsg, &nextRow.InnovationMsg)
-		questionRows = append(questionRows, nextRow)
+		if innovationFirst {
+			questionsOut = append(questionsOut, SortedResponses{
+				UserMsg:        nextRow.UserMsg,
+				FirstResponse:  nextRow.InnovationMsg,
+				SecondResponse: nextRow.CautionMsg,
+			})
+		} else {
+			questionsOut = append(questionsOut, SortedResponses{
+				UserMsg:        nextRow.UserMsg,
+				FirstResponse:  nextRow.CautionMsg,
+				SecondResponse: nextRow.InnovationMsg,
+			})
+		}
+	}
+	var orientation string
+	if len(questionsOut)%2 == 0 {
+		orientation = "response-left"
+	} else {
+		orientation = "response-right"
 	}
 
 	var data = struct {
-		QuestionRows    []QuestionRow
+		QuestionRows    []SortedResponses
 		InnovationFirst bool
 		ResponseID      string
+		Orientation     string
 	}{
-		QuestionRows:    questionRows,
+		QuestionRows:    questionsOut,
 		InnovationFirst: innovationFirst,
 		ResponseID:      responseID.String(),
+		Orientation:     orientation,
 	}
 
 	err = tmpls.ExecuteTemplate(w, "index.html", data)
