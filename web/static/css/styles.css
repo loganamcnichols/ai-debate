@@ -23,6 +23,7 @@
       flex-direction: column;
       height: 90vh;/* Adjust '50px' to set the space from the bottom */
       padding-bottom: 300px; /* Adjust this value to move messages higher */
+      overflow: scroll;
       margin: 0% 5% 0% 5%;
     }
   }
