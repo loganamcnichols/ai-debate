@@ -153,13 +153,6 @@ a:visited {
     z-index: 1000; /* Ensure the header stays on top */
 }
 
-/* Countdown Timer Styling */
-#countdown-timer p {
-    font-size: 1em; /* Adjusted for better alignment */
-    display: flex;
-    align-items: center;
-}
-
 #timer {
     display: flex;
     align-items: center;
