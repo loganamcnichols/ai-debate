@@ -11,19 +11,6 @@
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
 <body>
-  <header id="sticky-header">
-      <div id="countdown-timer">
-          <p>You will be directed to the survey in 
-            &nbsp;&nbsp;
-            <span id="timer">
-                <span id="minutes">05</span><span>:</span><span id="seconds">00</span>
-            </span>
-          </p>
-      </div>
-      <div id="new-chat-btn"
-           _="on click call deleteCookie('response-id')
-                  then call deleteCookie('timerValue')"><a href="/">New Chat</a></div>
-  </header>
   <main _="on load 
            on scroll 
             if my scrollTop + my clientHeight is greater than my scrollHeight - 100 
@@ -36,6 +23,14 @@
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
+  <header id="sticky-header">
+      <div id="countdown-timer">
+          <p>Survey in &nbsp;&nbsp;<span id="timer"><span id="minutes">05</span><span>:</span><span id="seconds">00</span></span></p>
+      </div>
+      <div id="new-chat-btn"
+           _="on click call deleteCookie('response-id')
+                  then call deleteCookie('timerValue')"><a href="/">New Chat</a></div>
+  </header>
     {{ if eq (len .QuestionRows) 0 }}
     <div class="chat-row"
          _="on load showIntroMsgs()

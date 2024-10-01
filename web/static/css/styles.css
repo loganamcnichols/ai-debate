@@ -149,12 +149,8 @@ a:visited {
     display: flex;
     align-items: center;
     z-index: 1000; /* Ensure the header stays on top */
-}
-
-@media  screen and (min-width: 1000px) {
- #sticky-header {
     justify-content: space-between; /* Align items to left and right */
- } 
+    text-align: center;
 }
 
 @media  screen and (max-width: 1000px) {
@@ -163,10 +159,6 @@ a:visited {
  } 
 }
 
-#timer {
-    display: flex;
-    align-items: center;
-}
 
 #countdown-timer span {
     text-align: center;
@@ -184,8 +176,10 @@ a:visited {
     font-size: 1em; /* Consistent with timer text size */
     cursor: pointer;
     transition: background-color 0.3s ease;
-    flex-grow: 1;
-    width: 100%;
+}
+
+#new-chat-button {
+  text-align: center;
 }
 
 #new-chat-btn:hover {
