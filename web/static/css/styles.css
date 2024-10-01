@@ -95,7 +95,7 @@ a:visited {
     left: 0;
     width: 100%;
     padding: 4rem 5% 4rem 5%;
-    height: 10%;
+    height: 20%;
   }
 }
 
@@ -146,10 +146,22 @@ a:visited {
     margin: 0;
   }
 
+
 @media screen and (min-width: 1000px) {
- textarea {
-    font-size: 1.5rem;
- } 
+  .textbar img {
+    min-width: 3rem;
+  }
+  textarea {
+      font-size: 1.5rem;
+  } 
+}
+@media screen and (max-width: 1000px) {
+  .textbar img {
+    min-width: 2rem;
+  }
+  textarea {
+      font-size: 1.0rem;
+  } 
 }
 
 .intro-msg {
