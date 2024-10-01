@@ -207,12 +207,14 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				firstAnswer += delta.Text
 				if i%10 == 0 {
 					fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
+					flusher.Flush()
 				}
-				flusher.Flush()
 			}
 		}
 		i++
 	}
+	fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
+	flusher.Flush()
 
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
@@ -232,13 +234,14 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				secondAnswer += delta.Text
 				if i%10 == 0 {
 					fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
+					flusher.Flush()
 				}
-				flusher.Flush()
 			}
 		}
 		i++
 	}
 	fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
+	flusher.Flush()
 	fmt.Fprint(w, "event: success\ndata: success\n\n")
 	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
 

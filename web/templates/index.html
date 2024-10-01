@@ -34,7 +34,7 @@
   {{ end }}
   {{ end }}
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
-          hx-post="/submit" hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom">
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" 
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
