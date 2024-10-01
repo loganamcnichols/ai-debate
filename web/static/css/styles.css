@@ -12,7 +12,6 @@
       flex-direction: column;
       height: 90%;
       overflow-y: scroll;
-      padding-bottom: 20%;
       margin: 0% 5% 0% 5%;
       scroll-behavior: smooth;
     }
