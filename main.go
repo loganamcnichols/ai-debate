@@ -277,6 +277,7 @@ func createResponse() (uuid.UUID, error) {
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Security-Policy", "frame-src 'self' https://yourdomain.com;")
 	var responseID uuid.UUID
 	cookie, err := r.Cookie("response-id")
 	if err == http.ErrNoCookie {
