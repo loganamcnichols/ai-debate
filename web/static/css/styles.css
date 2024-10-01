@@ -12,7 +12,7 @@
       flex-direction: column;
       height: 90%;
       overflow-y: scroll;
-      padding-bottom: 10%;
+      padding-bottom: 15%;
       margin: 0% 5% 0% 5%;
       scroll-behavior: smooth;
     }
@@ -192,12 +192,3 @@ a:visited {
     background-color: #e60000; /* Darker red on hover */
 }
 
-/* Optional: Add some top padding to the body to prevent content from being hidden behind the fixed header */
-body {
-    padding-top: 20vh; /* Adjusted based on header height */
-}
-
-/* Optional: Example content styling */
-.content {
-    padding: 20px;
-}
