@@ -145,7 +145,6 @@ a:visited {
     left: 0;
     width: 100%;
     color: #fff;
-    padding: 2rem; /* Reduced padding for a more compact header */
     display: flex;
     align-items: center;
     z-index: 1000; /* Ensure the header stays on top */
