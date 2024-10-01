@@ -74,8 +74,11 @@
     bottom: 0;
     left: 0;
     width: 100%;
-    padding: 4rem 25% 4rem 25%;
-    height: 10vh;
+    padding: 2rem 25% 2rem 25%;
+    height: 20vh;
+  }
+  body, html {
+    font-size: 18px;
   }
 }
 
@@ -98,15 +101,35 @@ a:visited {
 
   .textbar
   {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
     background-color: #253141;
+    padding: 1rem 1rem 1rem 2rem;
     border-radius: 80px;
   }
 
-  .textbar > textarea:disabled
+  .textbar > textarea {
+    flex-grow: 1;
+  }
+
+  .textbar > button {
+    background-color: transparent;
+    border: none;
+    align-self: flex-end;
+  }
+
+  button:hover {
+    cursor: pointer;
+  }
+
+  .textbar:has(> textarea:disabled)
   {
     background-color: #1B2431;
-    border-radius: 80px;
-    border: 2px solid black;
+  }
+  .textbar:has(> textarea:enabled)
+  {
+    background-color: #253141;
   }
 
   textarea {
@@ -117,10 +140,9 @@ a:visited {
     outline: none;
     background-color: transparent;
     font-family: inherit;
-    font-size: inherit;
+    font-size: 1.5rem;
     line-height: 1.5;
     resize: none;
-    padding: 1rem 2rem 1rem 2rem;
     color: inherit;
     margin: 0;
   }
