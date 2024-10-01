@@ -198,16 +198,20 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(firstSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
+	i := 0
 	for stream.Next() {
 		event := stream.Current()
 		switch delta := event.Delta.(type) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				firstAnswer += delta.Text
-				fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
+				if i%10 == 0 {
+					fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
+				}
 				flusher.Flush()
 			}
 		}
+		i++
 	}
 
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
@@ -219,17 +223,22 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
+	i = 0
 	for stream.Next() {
 		event := stream.Current()
 		switch delta := event.Delta.(type) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				secondAnswer += delta.Text
-				fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
+				if i%10 == 0 {
+					fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
+				}
 				flusher.Flush()
 			}
 		}
+		i++
 	}
+	fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
 	fmt.Fprint(w, "event: success\ndata: success\n\n")
 	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
 
