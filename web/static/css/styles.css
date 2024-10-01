@@ -78,6 +78,11 @@
     height: 10vh;
   }
 }
+
+a:visited {
+    color: inherit; /* Remove the default visited color change */
+}
+
 @media screen and (max-width: 1000px) {
   #submission-form
   {
@@ -95,7 +100,6 @@
   {
     background-color: #253141;
     border-radius: 80px;
-    border: 2px solid black;
   }
 
   .textbar > textarea:disabled
@@ -131,4 +135,70 @@
 .intro-msg.visible {
   opacity: 1;
   visibility: visible;
+}
+
+
+/* Sticky Header Styling */
+#sticky-header {
+    position: fixed;
+    box-sizing: border-box;
+    top: 0;
+    left: 0;
+    width: 100%;
+    color: #fff;
+    padding: 2rem; /* Reduced padding for a more compact header */
+    display: flex;
+    justify-content: space-between; /* Align items to left and right */
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    z-index: 1000; /* Ensure the header stays on top */
+}
+
+/* Countdown Timer Styling */
+#countdown-timer p {
+    font-size: 1em; /* Adjusted for better alignment */
+    display: flex;
+    align-items: center;
+}
+
+#timer {
+    display: flex;
+    align-items: center;
+    margin-left: 5px; /* Slight spacing between text and timer */
+}
+
+#countdown-timer span {
+    text-align: center;
+    font-size: 1.5em; /* Slightly increased for better visibility */
+    margin: 0; /* Minimal spacing between numbers and colon */
+}
+
+#countdown-timer span#timer {
+  padding-left: 1rem;
+}
+
+/* New Chat Button Styling */
+#new-chat-btn {
+    background-color: #ff4d4d; /* Bright red color */
+    color: #fff;
+    border: none;
+    border-radius: 25px; /* Reduced radius for a sleeker button */
+    padding: 8px 16px; /* Adjusted padding for better proportion */
+    font-size: 1em; /* Consistent with timer text size */
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+#new-chat-btn:hover {
+    background-color: #e60000; /* Darker red on hover */
+}
+
+/* Optional: Add some top padding to the body to prevent content from being hidden behind the fixed header */
+body {
+    padding-top: 60px; /* Adjusted based on header height */
+}
+
+/* Optional: Example content styling */
+.content {
+    padding: 20px;
 }
