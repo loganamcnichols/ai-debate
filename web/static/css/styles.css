@@ -140,12 +140,17 @@ a:visited {
     outline: none;
     background-color: transparent;
     font-family: inherit;
-    font-size: 1.5rem;
-    line-height: 1.5;
     resize: none;
+    line-height: 1.5;
     color: inherit;
     margin: 0;
   }
+
+@media screen and (min-width: 1000px) {
+ textarea {
+    font-size: 1.5rem;
+ } 
+}
 
 .intro-msg {
   text-align: center;
