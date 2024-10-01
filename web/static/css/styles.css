@@ -146,6 +146,7 @@ a:visited {
     width: 100%;
     color: #fff;
     display: flex;
+    padding: 2rem 0rem 2rem 0rem;
     align-items: center;
     z-index: 1000; /* Ensure the header stays on top */
     justify-content: space-between; /* Align items to left and right */
