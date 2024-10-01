@@ -23,7 +23,7 @@
       flex-direction: column;
       height: 100vh;/* Adjust '50px' to set the space from the bottom */
       overflow-y: scroll;
-      padding-bottom: 10vh;
+      padding-bottom: 20vh;
       margin: 0% 5% 0% 5%;
     }
   }
