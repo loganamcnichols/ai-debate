@@ -140,7 +140,6 @@ a:visited {
 
 /* Sticky Header Styling */
 #sticky-header {
-    position: fixed;
     box-sizing: border-box;
     top: 0;
     left: 0;
@@ -148,9 +147,20 @@ a:visited {
     color: #fff;
     padding: 2rem; /* Reduced padding for a more compact header */
     display: flex;
-    justify-content: space-between; /* Align items to left and right */
     align-items: center;
     z-index: 1000; /* Ensure the header stays on top */
+}
+
+@media  screen and (min-width: 1000px) {
+ #sticky-header {
+    justify-content: space-between; /* Align items to left and right */
+ } 
+}
+
+@media  screen and (max-width: 1000px) {
+ #sticky-header {
+  flex-direction: column;
+ } 
 }
 
 #timer {
@@ -174,6 +184,8 @@ a:visited {
     font-size: 1em; /* Consistent with timer text size */
     cursor: pointer;
     transition: background-color 0.3s ease;
+    flex-grow: 1;
+    width: 100%;
 }
 
 #new-chat-btn:hover {
