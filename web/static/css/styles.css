@@ -121,3 +121,14 @@
     margin: 0;
   }
 
+.intro-msg {
+  text-align: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.5s ease-in-out, visibility 0.5s ease-in-out;
+}
+
+.intro-msg.visible {
+  opacity: 1;
+  visibility: visible;
+}

@@ -11,7 +11,17 @@
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
 <body>
-  <main _="on scroll 
+  <main _="on load 
+            wait 1s then
+            get #intro-msg-one then
+            add .visible to it then
+            wait 3s
+            get #intro-msg-two then
+            add .visible to it then
+            wait 3s
+            get #intro-msg-three then
+            add .visible to it then
+           on scroll 
             if my scrollTop + my clientHeight is greater than my scrollHeight - 100 
               set userScrolling to true
             otherwise 
@@ -22,6 +32,42 @@
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
+    <p id="intro-msg-one" class="intro-msg">
+      You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
+    </p>
+    <p id="intro-msg-two" class="intro-msg">
+      One is trained on the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement
+    </p>
+    <p id="intro-msg-three" class="intro-msg">
+      The other is trained on the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
+    </p>
+  {{ if .InnovationFirst }}
+    <div class="response-left"
+        _="on load 
+            call animateAppend(me, 
+                            ['I ', 'will ', 'be ', 'arguing ', 'for ', 'greater ', '<strong>innovation</strong>.'], 
+                            8000)">
+    </div>
+    <div class="response-right"
+        _="on load 
+            call animateAppend(me, 
+                            ['I ', 'will ', 'be ', 'arguing ', 'for ', 'greater ', '<strong>caution</strong>.'], 
+                            9000)">
+    </div>
+  {{ else }}
+    <div class="response-left"
+        _="on load 
+            call animateAppend(me, 
+                            ['I ', 'will ', 'be ', 'arguing ', 'for ', 'greater ', '<strong> innovation </strong>.'], 
+                            8000)">
+    </div>
+    <div class="response-right"
+        _="on load 
+            call animateAppend(me, 
+                            ['I ', 'will ', 'be ', 'arguing ', 'for ', 'greater ', '<strong>caution</strong>.'], 
+                            9000)">
+    </div>
+  {{ end }}
   {{ range $i, $val := .QuestionRows }}
   {{ if eq (mod $i 2) 0 }}
     <p class="user-msg">{{ .UserMsg }}</p>
@@ -42,5 +88,14 @@
       </div>
     </form>
   </main>
+<script type="text/hyperscript">
+  def animateAppend(elt, x, timeout)
+    wait timeout
+    repeat for word in x
+      wait 100ms append word to elt's innerHTML
+    end
+  end
+</script>
+
 </body>
 </html>

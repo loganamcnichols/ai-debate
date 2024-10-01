@@ -28,9 +28,10 @@ type QuestionRow struct {
 }
 
 type SortedResponses struct {
-	UserMsg        string
-	FirstResponse  string
-	SecondResponse string
+	UserMsg         string
+	FirstResponse   string
+	SecondResponse  string
+	InnovationFirst bool
 }
 
 var client *claude.Client
@@ -321,15 +322,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			&nextRow.CautionMsg, &nextRow.InnovationMsg)
 		if innovationFirst {
 			questionsOut = append(questionsOut, SortedResponses{
-				UserMsg:        nextRow.UserMsg,
-				FirstResponse:  nextRow.InnovationMsg,
-				SecondResponse: nextRow.CautionMsg,
+				UserMsg:         nextRow.UserMsg,
+				FirstResponse:   nextRow.InnovationMsg,
+				SecondResponse:  nextRow.CautionMsg,
+				InnovationFirst: innovationFirst,
 			})
 		} else {
 			questionsOut = append(questionsOut, SortedResponses{
-				UserMsg:        nextRow.UserMsg,
-				FirstResponse:  nextRow.CautionMsg,
-				SecondResponse: nextRow.InnovationMsg,
+				UserMsg:         nextRow.UserMsg,
+				FirstResponse:   nextRow.CautionMsg,
+				SecondResponse:  nextRow.InnovationMsg,
+				InnovationFirst: innovationFirst,
 			})
 		}
 	}
