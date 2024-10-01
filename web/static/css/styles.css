@@ -150,7 +150,6 @@ a:visited {
     display: flex;
     justify-content: space-between; /* Align items to left and right */
     align-items: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     z-index: 1000; /* Ensure the header stays on top */
 }
 
@@ -164,18 +163,13 @@ a:visited {
 #timer {
     display: flex;
     align-items: center;
-    margin-left: 5px; /* Slight spacing between text and timer */
 }
 
 #countdown-timer span {
     text-align: center;
     font-size: 1.5em; /* Slightly increased for better visibility */
-    margin: 0; /* Minimal spacing between numbers and colon */
 }
 
-#countdown-timer span#timer {
-  padding-left: 1rem;
-}
 
 /* New Chat Button Styling */
 #new-chat-btn {
