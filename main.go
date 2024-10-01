@@ -316,6 +316,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var questionsOut []SortedResponses
+	initInnvationFirst := innovationFirst
 	for res.Next() {
 		var nextRow QuestionRow
 		res.Scan(&nextRow.QuestionID, &nextRow.ResponseID, &nextRow.UserMsg,
@@ -335,6 +336,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 				InnovationFirst: innovationFirst,
 			})
 		}
+		innovationFirst = !innovationFirst
 	}
 	var orientation string
 	if len(questionsOut)%2 == 0 {
@@ -350,7 +352,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		Orientation     string
 	}{
 		QuestionRows:    questionsOut,
-		InnovationFirst: innovationFirst,
+		InnovationFirst: initInnvationFirst,
 		ResponseID:      responseID.String(),
 		Orientation:     orientation,
 	}
