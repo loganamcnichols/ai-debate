@@ -195,7 +195,7 @@ a:visited {
 
 /* Optional: Add some top padding to the body to prevent content from being hidden behind the fixed header */
 body {
-    padding-top: 60px; /* Adjusted based on header height */
+    padding-top: 10vh; /* Adjusted based on header height */
 }
 
 /* Optional: Example content styling */
