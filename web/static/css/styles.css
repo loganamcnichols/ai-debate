@@ -153,12 +153,6 @@ a:visited {
     text-align: center;
 }
 
-@media  screen and (max-width: 1000px) {
- #sticky-header {
-  flex-direction: column;
- } 
-}
-
 
 #countdown-timer span {
     text-align: center;
