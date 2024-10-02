@@ -119,7 +119,8 @@
   function isParentDomainAllowed() {
     try {
       const parentDomain = new URL(parent.location.href).hostname;
-      return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink');
+      return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink') ||
+             parentDomain === 'localhost';
     } catch (e) {
       return false;
     }
