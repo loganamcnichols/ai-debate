@@ -23,14 +23,6 @@
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
-  <header id="sticky-header">
-      <div id="countdown-timer">
-          <p>Survey in &nbsp;&nbsp;<span id="timer"><span id="minutes">05</span><span>:</span><span id="seconds">00</span></span></p>
-      </div>
-      <div id="new-chat-btn"
-           _="on click call deleteCookie('response-id')
-                  then call deleteCookie('timerValue')"><a href="/">New Chat</a></div>
-  </header>
     {{ if eq (len .QuestionRows) 0 }}
     <div class="chat-row"
          _="on load showIntroMsgs()
@@ -110,75 +102,6 @@
     get the first .response-right then
     call animateAppend(it, second_msg)
   end
-    
-
 </script>
-<script type="text/hyperscript">
-</script>
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-      const COOKIE_NAME = "timerEndTime";
-      const TOTAL_TIME = 5 * 60; // 5 minutes in seconds
-
-      function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-      }
-
-      function setCookie(name, value, expirationInSeconds) {
-        const date = new Date();
-        date.setTime(date.getTime() + (expirationInSeconds * 1000));
-        const expires = "expires=" + date.toUTCString();
-        document.cookie = `${name}=${value};${expires};path=/`;
-      }
-
-      // Initialize or retrieve the end time
-      let endTime = getCookie(COOKIE_NAME);
-      if (!endTime) {
-        const now = Date.now();
-        endTime = now + TOTAL_TIME * 1000;
-        setCookie(COOKIE_NAME, endTime, TOTAL_TIME);
-      } else {
-        endTime = parseInt(endTime, 10);
-      }
-
-      const minutesSpan = document.getElementById("minutes");
-      const secondsSpan = document.getElementById("seconds");
-
-      const timerInterval = setInterval(updateTimer, 1000);
-      updateTimer(); // Initialize immediately
-
-      function updateTimer() {
-        const now = Date.now();
-        let timeRemaining = Math.floor((endTime - now) / 1000);
-
-        if (timeRemaining < 0) timeRemaining = 0;
-
-        const minutes = Math.floor(timeRemaining / 60);
-        const seconds = timeRemaining % 60;
-
-        minutesSpan.textContent = String(minutes).padStart(2, '0');
-        secondsSpan.textContent = String(seconds).padStart(2, '0');
-
-        if (timeRemaining > 0) {
-          // Optionally, update the cookie to extend the expiration
-          setCookie(COOKIE_NAME, endTime, timeRemaining);
-        } else {
-          clearInterval(timerInterval);
-          // Redirect to the /survey page
-          window.location.href = "/survey";
-          // Optionally, clear the cookie
-          setCookie(COOKIE_NAME, "", -1);
-        }
-      }
-    });
-function deleteCookie(name) {
-  console.log('delete cookie called');
-  document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-}
-</script>
-
 </body>
 </html>
