@@ -119,6 +119,7 @@
   function isParentDomainAllowed() {
     try {
       const parentDomain = new URL(parent.location.href).hostname;
+      console.log("parent domain showing", parentDomain);
       return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink') ||
              parentDomain === 'localhost';
     } catch (e) {
@@ -129,6 +130,7 @@
   // Function to send message to parent
   function sendMessageToParent(type, content) {
     if (isInIframe() && isParentDomainAllowed()) {
+      console.log("sending message", { type, content });
       parent.postMessage({ type, content }, '*');
     }
   }
