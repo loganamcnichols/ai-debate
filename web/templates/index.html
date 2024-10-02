@@ -18,9 +18,10 @@
             otherwise 
               set userScrolling to false
             end
+           on htmx:sseBeforeMessage
+            call responseEvent(event)
            on htmx:sseMessage 
             if no userScrolling set my scrollTop to my scrollHeight then
-            call responseEvent(event)
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
@@ -146,6 +147,7 @@
       if (msg.data == "true") innovationFirst = true; 
       else if (msg.data == "false") innovationFirst = false;
       else throw("unknown messaged data");
+      event.preventDefault();
     }
     if (msg.type === "first-response") {
       if (innovationFirst) sendMessageToParent('innovation-response', msg.data);
