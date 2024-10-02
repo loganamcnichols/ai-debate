@@ -20,6 +20,7 @@
             end
            on htmx:sseMessage 
             if no userScrolling set my scrollTop to my scrollHeight then
+            call responseEvent(event)
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
@@ -56,7 +57,8 @@
   {{ end }}
   {{ end }}
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
-          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom">
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
+          _="on htmx:beforeRequest call inputEvent(event)">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" 
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
@@ -124,23 +126,29 @@
   }
 
   // Function to send message to parent
-  function sendMessageToParent(type, data) {
+  function sendMessageToParent(type, content) {
     if (isInIframe() && isParentDomainAllowed()) {
-      parent.postMessage({ type, data }, '*');
+      parent.postMessage({ type, content }, '*');
     }
   }
 
-  // Modified event listener
-  document.addEventListener("htmx:sseMessage", (event) => {
+  // Modified response event handler
+  function responseEvent(event) {
     const msg = event.detail;
     if (msg.type === "first-response") {
-      console.log('first message raw', msg);
       sendMessageToParent('first-response', msg.data);
     } else if (msg.type === "second-response") {
-      console.log('second message raw', msg);
       sendMessageToParent('second-response', msg.data);
     }
-  });
+  }
+
+  // Updated input event handler
+  function inputEvent(event) {
+    const textarea = event.detail.elt.querySelector("textarea");
+    const content = textarea.value;
+    console.log("Input event called with: ", content);
+    sendMessageToParent('user-input', content);
+  }
 </script>
 </body>
 </html>
