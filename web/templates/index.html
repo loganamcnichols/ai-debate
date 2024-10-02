@@ -151,10 +151,10 @@
     }
     if (msg.type === "first-response") {
       if (innovationFirst) sendMessageToParent('innovation-response', msg.data);
-      else                 sendMessageToParent('caution-reponse', msg.data);
+      else                 sendMessageToParent('caution-response', msg.data);
     } else if (msg.type === "second-response") {
       if (innovationFirst) sendMessageToParent('caution-response', msg.data);
-      else                 sendMessageToParent('innovation-reponse', msg.data);
+      else                 sendMessageToParent('innovation-response', msg.data);
     }
   }
 
