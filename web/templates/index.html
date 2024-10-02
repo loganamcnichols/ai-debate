@@ -129,6 +129,8 @@
 
   // Function to send message to parent
   function sendMessageToParent(type, content) {
+    console.log("isInFrame returning", isInIframe());
+    console.log("isParentDomainAllowed returing", isParentDomainAllowed());
     if (isInIframe() && isParentDomainAllowed()) {
       console.log("sending message", { type, content });
       parent.postMessage({ type, content }, '*');
