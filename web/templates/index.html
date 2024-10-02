@@ -118,6 +118,7 @@
   // Function to check if the parent domain is surveyor.ink or a subdomain
   function isParentDomainAllowed() {
     try {
+      console.log("parent.location.href", parent.location.href);
       const parentDomain = new URL(parent.location.href).hostname;
       console.log("parent domain showing", parentDomain);
       return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink') ||
