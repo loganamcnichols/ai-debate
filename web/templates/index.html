@@ -74,10 +74,7 @@
 
 <script type="text/hyperscript">
   def animateAppend(elt, x)
-    log 'got here'
-    log elt's innerHTML
     repeat for word in x.split(' ')
-      log 'looping'
       wait 100ms append word + ' ' to elt's innerHTML
     end
   end
@@ -133,7 +130,6 @@
     allowedOrigins.forEach(origin => {
       try {
         window.parent.postMessage({ type, content }, origin);
-        console.log('Message sent to:', origin);
       } catch (e) {
         console.error('Error sending message to', origin, ':', e);
       }
