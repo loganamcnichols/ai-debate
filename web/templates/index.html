@@ -19,7 +19,7 @@
               set userScrolling to false
             end
            on htmx:sseMessage 
-            if no userScrolling set my scrollTop to my scrollHeight 
+            if no userScrolling set my scrollTop to my scrollHeight then
             end
            on htmx:sseClose send wakeUp to #user-input
            on htmx:afterSettle set my scrollTop to my scrollHeight">
@@ -102,6 +102,45 @@
     get the first .response-right then
     call animateAppend(it, second_msg)
   end
+</script>
+<script>
+  // Function to check if the current window is in an iframe
+  function isInIframe() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  // Function to check if the parent domain is surveyor.ink or a subdomain
+  function isParentDomainAllowed() {
+    try {
+      const parentDomain = new URL(parent.location.href).hostname;
+      return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink');
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Function to send message to parent
+  function sendMessageToParent(type, data) {
+    if (isInIframe() && isParentDomainAllowed()) {
+      parent.postMessage({ type, data }, '*');
+    }
+  }
+
+  // Modified event listener
+  document.addEventListener("htmx:sseMessage", (event) => {
+    const msg = event.detail;
+    if (msg.type === "first-response") {
+      console.log('first message raw', msg);
+      sendMessageToParent('first-response', msg.data);
+    } else if (msg.type === "second-response") {
+      console.log('second message raw', msg);
+      sendMessageToParent('second-response', msg.data);
+    }
+  });
 </script>
 </body>
 </html>

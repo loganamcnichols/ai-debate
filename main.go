@@ -206,10 +206,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				firstAnswer += delta.Text
-				if i%10 == 0 {
-					fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
-					flusher.Flush()
-				}
 			}
 		}
 		i++
@@ -233,18 +229,17 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				secondAnswer += delta.Text
-				if i%10 == 0 {
-					fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
-					flusher.Flush()
-				}
 			}
 		}
 		i++
 	}
+
 	fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
 	flusher.Flush()
 	fmt.Fprint(w, "event: success\ndata: success\n\n")
+	flusher.Flush()
 	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
+	flusher.Flush()
 
 	var updateCmd string
 	if innovateFirst {
