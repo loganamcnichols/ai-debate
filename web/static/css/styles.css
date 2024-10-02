@@ -12,7 +12,7 @@
       flex-direction: column;
       height: 90%;
       overflow-y: scroll;
-      margin: 0% 5% 0% 5%;
+      margin: 20vh 5% 0% 5%;
       scroll-behavior: smooth;
     }
   }
@@ -25,7 +25,7 @@
       flex-direction: column;
       overflow-y: scroll; 
       height: 90vh;
-      margin: 0% 25% 0% 25%;
+      margin: 20vh 25% 0% 25%;
       box-sizing: border-box;
       scroll-behavior: smooth;
     }
