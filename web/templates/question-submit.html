@@ -1,11 +1,8 @@
 <div hx-ext="sse" sse-connect="/chat-response?response-id={{ .ResponseID }}" sse-close="close" class="chat-row">
+  <data sse-swap="innovation-first"></data>
   <p class="user-msg">{{ .UserMsg }}</p>
-  <div id="new-shit-1" class="{{ .FirstResponse }}"></div>
-  <div class="sse-listener" style="height:0px;margin:0;padding:0;" 
-  sse-swap="first-response" hx-target="previous" hx-swap="innerHTML"></div>
-  <div id="new-shit-2" class="{{ .SecondResponse }}"></div>
-  <div class="sse-listener" style="height:0px;margin:0;padding:0;" hx-ext="sse" 
-  sse-swap="second-response" hx-target="previous" hx-swap="innerHTML"></div>
+  <div class="{{ .FirstResponse }}" sse-swap="first-response"></div>
+  <div class="{{ .SecondResponse }}" sse-swap="second-response"></div>
 </div>
 <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .SecondResponse }}"
       hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"

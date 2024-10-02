@@ -210,6 +210,15 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		}
 		i++
 	}
+
+	if innovateFirst {
+		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
+		flusher.Flush()
+	} else {
+		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
+		flusher.Flush()
+	}
+
 	fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
 	flusher.Flush()
 

@@ -106,24 +106,35 @@
   end
 </script>
 <script>
+
+  let innovationFirst = true;
   const allowedOrigins = [
     'http://localhost:5173',
-    'http://localhost:8080',
     'https://surveyor.ink',
     'https://www.surveyor.ink'
-    // Add any other allowed origins here
   ];
+  function isInIframe() {
+    try {
+      return window.self !== window.top;
+    } catch (e) {
+      return true;
+    }
+  }
 
   // Function to send message to parent
   function sendMessageToParent(type, content) {
+    if (!isInIframe()) {
+      return;
+    }
+
     console.log('Attempting to send message to parent:', { type, content });
     
     allowedOrigins.forEach(origin => {
       try {
-        parent.postMessage({ type, content }, origin);
+        window.parent.postMessage({ type, content }, origin);
         console.log('Message sent to:', origin);
       } catch (e) {
-        console.log('Failed to send message to:', origin);
+        console.error('Error sending message to', origin, ':', e);
       }
     });
   }
@@ -131,10 +142,17 @@
   // Modified response event handler
   function responseEvent(event) {
     const msg = event.detail;
+    if (msg.type == "innovation-first") {
+      if (msg.data == "true") innovationFirst = true; 
+      else if (msg.data == "false") innovationFirst = false;
+      else throw("unknown messaged data");
+    }
     if (msg.type === "first-response") {
-      sendMessageToParent('first-response', msg.data);
+      if (innovationFirst) sendMessageToParent('innovation-response', msg.data);
+      else                 sendMessageToParent('caution-reponse', msg.data);
     } else if (msg.type === "second-response") {
-      sendMessageToParent('second-response', msg.data);
+      if (innovationFirst) sendMessageToParent('caution-response', msg.data);
+      else                 sendMessageToParent('innovation-reponse', msg.data);
     }
   }
 
@@ -142,7 +160,6 @@
   function inputEvent(event) {
     const textarea = event.detail.elt.querySelector("textarea");
     const content = textarea.value;
-    console.log("Input event called with: ", content);
     sendMessageToParent('user-input', content);
   }
 </script>
