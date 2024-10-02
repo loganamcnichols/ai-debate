@@ -106,36 +106,26 @@
   end
 </script>
 <script>
-  // Function to check if the current window is in an iframe
-  function isInIframe() {
-    try {
-      return window.self !== window.top;
-    } catch (e) {
-      return true;
-    }
-  }
-
-  // Function to check if the parent domain is surveyor.ink or a subdomain
-  function isParentDomainAllowed() {
-    try {
-      console.log("parent.location.href", parent.location.href);
-      const parentDomain = new URL(parent.location.href).hostname;
-      console.log("parent domain showing", parentDomain);
-      return parentDomain === 'surveyor.ink' || parentDomain.endsWith('.surveyor.ink') ||
-             parentDomain === 'localhost';
-    } catch (e) {
-      return false;
-    }
-  }
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'https://surveyor.ink',
+    'https://www.surveyor.ink'
+    // Add any other allowed origins here
+  ];
 
   // Function to send message to parent
   function sendMessageToParent(type, content) {
-    console.log("isInFrame returning", isInIframe());
-    console.log("isParentDomainAllowed returing", isParentDomainAllowed());
-    if (isInIframe() && isParentDomainAllowed()) {
-      console.log("sending message", { type, content });
-      parent.postMessage({ type, content }, '*');
-    }
+    console.log('Attempting to send message to parent:', { type, content });
+    
+    allowedOrigins.forEach(origin => {
+      try {
+        parent.postMessage({ type, content }, origin);
+        console.log('Message sent to:', origin);
+      } catch (e) {
+        console.log('Failed to send message to:', origin);
+      }
+    });
   }
 
   // Modified response event handler
