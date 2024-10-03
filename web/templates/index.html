@@ -57,7 +57,8 @@
 {{ end }}
   <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
         hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
-        _="on htmx:beforeRequest call inputEvent(event)">
+        _="on htmx:beforeRequest call inputEvent(event)
+           on htmx:afterSwap send event to next <data/>">
     <div class="textbar">
       <textarea name="user-msg" id="user-input" rows="1" 
       _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
@@ -68,7 +69,8 @@
       </button>
     </div>
   </form>
-  <data id="bottom" _="on load me.scrollIntoView({ behavior: 'smooth' })"></data>
+  <data id="bottom" _="on load me.scrollIntoView({ behavior: 'smooth' })
+                       on htmx:afterSwap me.scrollIntoView({ behavior: 'smooth' })"></data>
 <script type="text/hyperscript">
   def animateAppend(elt, x)
     repeat for word in x.split(' ')
