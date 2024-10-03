@@ -5,6 +5,10 @@
     min-width: 0px;
     box-sizing: border-box;
   }
+  
+  html {
+    height: 100%;
+  }
 
   html, body {
     font-size: 16px;
@@ -13,6 +17,10 @@
     background-color: #0F131A;
     box-sizing: border-box;
     color: #DEE4ED;
+  }
+  body {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   @media screen and (max-width: 1000px) 
