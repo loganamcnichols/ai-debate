@@ -439,7 +439,7 @@ func main() {
 		log.Fatalf("Failed to prepare updateChatStmt: %v", err)
 	}
 
-	responseInsertStmt, err = db.Prepare(`INSERT INTO response (first_move_innovation) VALUES (TRUE) RETURNING id`)
+	responseInsertStmt, err = db.Prepare(`INSERT INTO response (first_move_innovation) VALUES ($1) RETURNING id`)
 	if err != nil {
 		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
 	}
