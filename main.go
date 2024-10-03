@@ -288,7 +288,6 @@ func createResponse() (uuid.UUID, error) {
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
 	var responseID uuid.UUID
 	cookie, err := r.Cookie("response-id")
 	if err == http.ErrNoCookie {
@@ -389,7 +388,6 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error executing template: %v\n", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-	log.Println("time in index", time.Since(start))
 }
 
 func main() {
@@ -421,8 +419,8 @@ func main() {
 	}
 
 	defer db.Close()
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	submitStmt, err = db.Prepare(`INSERT INTO chat (response_id, user_msg) VALUES ($1, $2) RETURNING id;`)
