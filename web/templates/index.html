@@ -17,7 +17,7 @@
               set userScrolling to false
             end
           on load
-            document.documentElement.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
+            get closest <html/> then call it.scrollTo({ top: me.scrollHeight, behavior: 'smooth' })
           on htmx:sseBeforeMessage
             call responseEvent(event)
           on htmx:afterSwap
