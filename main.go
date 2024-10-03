@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -281,6 +282,7 @@ func createResponse() (uuid.UUID, error) {
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	var responseID uuid.UUID
 	cookie, err := r.Cookie("response-id")
 	if err == http.ErrNoCookie {
@@ -308,8 +310,23 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	err = db.QueryRow(query, responseID).Scan(&innovationFirst)
 	if err != nil {
 		log.Printf("unable to execute query %s: %v\n", query, err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		responseID, err = createResponse()
+		if err != nil {
+			log.Print(err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:  "response-id",
+			Value: responseID.String(),
+			Path:  "/",
+		})
+		query := "SELECT first_move_innovation FROM response WHERE id = $1"
+		var innovationFirst bool
+		err = db.QueryRow(query, responseID).Scan(&innovationFirst)
+		if err != nil {
+			log.Print(err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
 	}
 
 	query = "SELECT * FROM chat WHERE response_id = $1"
@@ -366,6 +383,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error executing template: %v\n", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+	log.Println("time in index", time.Since(start))
 }
 
 func main() {
@@ -395,6 +413,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("unable to ping database %v\n", err)
 	}
+
+	defer db.Close()
 
 	client = claude.NewClient()
 
