@@ -310,11 +310,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query := "SELECT first_move_innovation FROM response WHERE id = $1"
 	var innovationFirst bool
-	err = db.QueryRow(query, responseID).Scan(&innovationFirst)
+	err = innovationFirstStmt.QueryRow(responseID).Scan(&innovationFirst)
 	if err != nil {
-		log.Printf("unable to execute query %s: %v\n", query, err)
+		log.Printf("unable to execute query innovation first stmt: %v\n", err)
 		responseID, err = createResponse()
 		if err != nil {
 			log.Print(err)
@@ -334,10 +333,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query = "SELECT * FROM chat WHERE response_id = $1"
-	res, err := db.Query(query, responseID)
+	res, err := chatHistoryStmt.Query(responseID)
 	if err != nil {
-		log.Printf("error executing query %s: %v\n", query, err)
+		log.Printf("error executing query chatHistoryStmt: %v\n", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
