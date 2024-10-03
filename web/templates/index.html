@@ -16,9 +16,7 @@
             otherwise 
               set userScrolling to false
             end
-          on htmx:afterSwap get #bottom then it.scrollIntoView({ behavior: 'smooth' })  then log me
           on htmx:sseMessage get #bottom then it.scrollIntoView({ behavior: 'smooth' })
-          on htmx:beforeSwap me.focus()
           on htmx:sseBeforeMessage
             call responseEvent(event)
           on htmx:sseClose send wakeUp to #user-input
