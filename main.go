@@ -199,6 +199,14 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedQuestion)))
 
+	if innovateFirst {
+		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
+		flusher.Flush()
+	} else {
+		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
+		flusher.Flush()
+	}
+
 	stream := client.Messages.NewStreaming(context.TODO(), claude.MessageNewParams{
 		Model:     claude.F(claude.ModelClaude_3_5_Sonnet_20240620),
 		MaxTokens: claude.Int(1024),
@@ -212,23 +220,15 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				firstAnswer += delta.Text
+				fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
+				flusher.Flush()
 			}
 		}
 		i++
 	}
 
-	if innovateFirst {
-		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
-		flusher.Flush()
-	} else {
-		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
-		flusher.Flush()
-	}
-
 	fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
 	flusher.Flush()
-
-	time.Sleep(5 * time.Second)
 
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
@@ -246,6 +246,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		case claude.ContentBlockDeltaEventDelta:
 			if delta.Text != "" {
 				secondAnswer += delta.Text
+				fmt.Fprintf(w, "event: second-response\ndata: %s\n\n", convertToParagraphs(secondAnswer))
+				flusher.Flush()
 			}
 		}
 		i++
