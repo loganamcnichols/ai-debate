@@ -145,6 +145,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	defer rows.Close()
 
 	var messages []claude.MessageParam
 	var questionID int
@@ -339,6 +340,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
+	defer res.Close()
 	var questionsOut []SortedResponses
 	initInnvationFirst := innovationFirst
 	for res.Next() {
