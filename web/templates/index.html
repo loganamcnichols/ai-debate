@@ -16,11 +16,11 @@
             otherwise 
               set userScrolling to false
             end
-          on htmx:sseMessage get #bottom then it.scrollIntoView({ behavior: 'smooth' })
-          on htmx:sseBeforeMessage
-            call responseEvent(event)
-          on htmx:sseClose send wakeUp to #user-input
-          on htmx:afterSettle set my scrollTop to my scrollHeight">
+          on load            me.scrollIntoView({ block: 'end', behavior: 'smooth' })
+          on htmx:afterSwap  me.scrollIntoView({ block: 'end', behavior: 'smooth' })
+          on htmx:sseMessage me.scrollIntoView({ block: 'end', behavior: 'smooth' })
+          on htmx:sseBeforeMessage call responseEvent(event)
+          on htmx:sseClose send wakeUp to #user-input">
 {{ if eq (len .QuestionRows) 0 }}
   <div class="chat-row"
         _="on load showIntroMsgs()
@@ -67,8 +67,6 @@
       </button>
     </div>
   </form>
-  <data id="bottom" _="on load me.scrollIntoView({ behavior: 'smooth' })
-                       on htmx:afterSwap me.scrollIntoView({ behavior: 'smooth' })"></data>
 <script type="text/hyperscript">
   def animateAppend(elt, x)
     repeat for word in x.split(' ')
