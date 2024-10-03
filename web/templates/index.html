@@ -18,13 +18,15 @@
             end
           on htmx:sseBeforeMessage
             call responseEvent(event)
+          on load
+            window.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
           on htmx:afterSwap
             if no userScrolling 
-              document.documentElement.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
+              window.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
             end
           on htmx:sseMessage 
             if no userScrolling 
-              document.documentElement.scrollTo({ top: my.scrollHeight, behavior: 'smooth' }) 
+              window.scrollTo({ top: my.scrollHeight, behavior: 'smooth' }) 
             end
           on htmx:sseClose send wakeUp to #user-input
           on htmx:afterSettle set my scrollTop to my scrollHeight">
