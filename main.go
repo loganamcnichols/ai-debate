@@ -228,6 +228,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "event: first-response\ndata: %s\n\n", convertToParagraphs(firstAnswer))
 	flusher.Flush()
 
+	time.Sleep(5 * time.Second)
+
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
 
