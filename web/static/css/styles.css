@@ -50,7 +50,7 @@
     flex-direction: column;
     flex-shrink: 1;
   }
-  .chat-row:nth-last-child(2)
+  .chat-row:last-of-type
   {
     min-height: 80vh;
   }
