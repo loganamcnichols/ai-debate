@@ -26,7 +26,7 @@
             end
           on htmx:sseMessage 
             if no userScrolling 
-              window.scrollTo({ top: my.scrollHeight, behavior: 'smoot' }) 
+              window.scrollTo({ top: my.scrollHeight, behavior: 'smooth' }) 
             end
           on htmx:sseClose send wakeUp to #user-input
           on htmx:afterSettle set my scrollTop to my scrollHeight">

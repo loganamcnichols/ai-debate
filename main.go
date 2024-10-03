@@ -39,6 +39,14 @@ var client *claude.Client
 var tmpls *template.Template
 var db *sql.DB
 
+var (
+	submitStmt          *sql.Stmt
+	innovationFirstStmt *sql.Stmt
+	chatHistoryStmt     *sql.Stmt
+	updateChatStmt      *sql.Stmt
+	// Add more as needed
+)
+
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	idParam := params.Get("response-id")
@@ -57,12 +65,9 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `INSERT INTO chat (response_id, user_msg) 
-	                    VALUES ($1, $2) RETURNING id;`
-
-	_, err = db.Exec(query, responseID, userMsg)
+	_, err = submitStmt.Exec(responseID, userMsg)
 	if err != nil {
-		log.Printf("error executing query %s, %v\n", params, err)
+		log.Printf("error executing submitStmt, %v\n", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -126,19 +131,17 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `SELECT first_move_innovation FROM response WHERE id = $1;`
 	var innovateFirst bool
-	err = db.QueryRow(query, responseID).Scan(&innovateFirst)
+	err = innovationFirstStmt.QueryRow(responseID).Scan(&innovateFirst)
 	if err != nil {
-		log.Printf("failed to execute query %s: %v\n", query, err)
+		log.Printf("failed to execute innovationFirstStmt: %v\n", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	query = `SELECT * FROM chat WHERE response_id = $1;`
-	rows, err := db.Query(query, responseID)
+	rows, err := chatHistoryStmt.Query(responseID)
 	if err != nil {
-		log.Printf("unable to execute query %s: %v\n", query, err)
+		log.Printf("unable to execute query chatHistoryStmt: %v\n", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -251,17 +254,20 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
 	flusher.Flush()
 
-	var updateCmd string
 	if innovateFirst {
-		updateCmd = "UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3;"
+		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
+		if err != nil {
+			log.Printf("error executing updateChatStmt: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	} else {
-		updateCmd = "UPDATE chat SET caution_msg = $1, innovation_msg = $2 WHERE id = $3;"
-	}
-	_, err = db.Exec(updateCmd, firstAnswer, secondAnswer, questionID)
-	if err != nil {
-		log.Printf("error executing update %s: %v", updateCmd, err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		_, err := updateChatStmt.Exec(secondAnswer, firstAnswer, questionID)
+		if err != nil {
+			log.Printf("error executing updateChatStmt: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 }
 
@@ -415,6 +421,29 @@ func main() {
 	}
 
 	defer db.Close()
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+
+	submitStmt, err = db.Prepare(`INSERT INTO chat (response_id, user_msg) VALUES ($1, $2) RETURNING id;`)
+	if err != nil {
+		log.Fatalf("Failed to prepare submitStmt: %v", err)
+	}
+
+	innovationFirstStmt, err = db.Prepare(`SELECT first_move_innovation FROM response WHERE id = $1;`)
+	if err != nil {
+		log.Fatalf("Failed to prepare innovationFirstStmt: %v", err)
+	}
+
+	chatHistoryStmt, err = db.Prepare(`SELECT * FROM chat WHERE response_id = $1;`)
+	if err != nil {
+		log.Fatalf("Failed to prepare chatHistoryStmt: %v", err)
+	}
+
+	updateChatStmt, err = db.Prepare(`UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3;`)
+	if err != nil {
+		log.Fatalf("Failed to prepare updateChatStmt: %v", err)
+	}
 
 	client = claude.NewClient()
 
