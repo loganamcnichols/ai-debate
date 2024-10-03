@@ -18,8 +18,6 @@
             end
           on htmx:sseBeforeMessage
             call responseEvent(event)
-          on load
-            document.documentElement.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
           on htmx:afterSwap
             if no userScrolling 
               document.documentElement.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
@@ -62,6 +60,7 @@
 {{ end }}
 {{ end }}
 {{ end }}
+  <data _="on load me.scrollIntoView({ behavior: 'smooth' })"></data>
   <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
         hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
         _="on htmx:beforeRequest call inputEvent(event)">
