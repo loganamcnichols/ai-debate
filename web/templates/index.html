@@ -16,8 +16,6 @@
             otherwise 
               set userScrolling to false
             end
-          on load
-            get closest <html/> then call it.scrollTo({ top: me.scrollHeight, behavior: 'smooth' })
           on htmx:sseBeforeMessage
             call responseEvent(event)
           on htmx:afterSwap
