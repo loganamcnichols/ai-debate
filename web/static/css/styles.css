@@ -2,32 +2,37 @@
     margin: 0;
     padding: 0;
     font-size: inherit;
+    min-width: 0px;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    font-size: 16px;
+    line-height: 1.8rem;
+    font-family: "Libre Franklin", sans-serif;
+    background-color: #0F131A;
+    box-sizing: border-box;
+    color: #DEE4ED;
   }
 
   @media screen and (max-width: 1000px) 
   {
-    main
+    body 
     {
       display: flex;
       flex-direction: column;
-      height: 90%;
-      overflow-y: scroll;
-      margin: 20vh 5% 0% 5%;
-      scroll-behavior: smooth;
+      padding: 20vh 5% 20vh 5%;
     }
   }
 
   @media screen and (min-width: 1000px)
   {
-    main
+    body
     {
       display: flex;
       flex-direction: column;
-      overflow-y: scroll; 
-      height: 90vh;
-      margin: 20vh 25% 0% 25%;
-      box-sizing: border-box;
-      scroll-behavior: smooth;
+      margin: 20vh 25% 20vh 25%;
+      font-size: 18px;
     }
   }
 
@@ -43,41 +48,34 @@
   }
   .user-msg       { align-self: center;     max-width: 70%; background-color: #374962; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
   .response-left  { align-self: flex-start; max-width: 70%; background-color: #375962; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
-  .response-right { align-self: flex-end;  max-width: 70%; background-color: #373E62; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
+  .response-right { align-self: flex-end;   max-width: 70%; background-color: #373E62; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
   .response-right * {
     transition: all 1s ease-in;
   }
 
-  html, body {
-    font-size: 16px;
-    line-height: 1.8rem;
-    height: 100%;
-    font-family: "Libre Franklin", sans-serif;
-    background-color: #0F131A;
-    box-sizing: border-box;
-    color: #DEE4ED;
-  }
-  * {
-    min-width: 0px;
-  }
-  .error-input
+  #submission-form
   {
-    border: solid red 1px;
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 15vh;
   }
 
 @media screen and (min-width: 1000px) {
   #submission-form
   {
-    position: fixed;
-    box-sizing: border-box;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    padding: 2rem 25% 2rem 25%;
-    height: 20vh;
+    background-color: #374962;
+    padding: 0rem 25% 0rem 25%;
   }
-  body, html {
-    font-size: 18px;
+}
+
+@media screen and (max-width: 1000px) {
+  #submission-form
+  {
+    background-color: #374962;
+    padding: 0rem 5% 0rem 5%;
   }
 }
 
@@ -85,27 +83,18 @@ a:visited {
     color: inherit; /* Remove the default visited color change */
 }
 
-@media screen and (max-width: 1000px) {
-  #submission-form
-  {
-    position: fixed;
-    box-sizing: border-box;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    padding: 4rem 5% 4rem 5%;
-    height: 20%;
-  }
-}
 
   .textbar
   {
     display: flex;
+    align-self: center;
+    align-items: center;
+    width: 100%;
     flex-direction: row;
     align-items: center;
     background-color: #253141;
-    padding: 1rem 1rem 1rem 2rem;
     border-radius: 80px;
+    padding: 0rem 1rem 0rem 2rem;
   }
 
   .textbar > textarea {
@@ -115,7 +104,6 @@ a:visited {
   .textbar > button {
     background-color: transparent;
     border: none;
-    align-self: flex-end;
   }
 
   button:hover {
@@ -133,15 +121,13 @@ a:visited {
 
   textarea {
     width: 100%;
-    box-sizing: border-box;
-    resize: vertical;
     border: none;
     outline: none;
     background-color: transparent;
     font-family: inherit;
-    resize: none;
-    line-height: 1.5;
+    line-height: inherit;
     color: inherit;
+    resize: none;
     margin: 0;
   }
 
@@ -150,9 +136,6 @@ a:visited {
   .textbar img {
     min-width: 3rem;
   }
-  textarea {
-      font-size: 1.5rem;
-  } 
 }
 @media screen and (max-width: 1000px) {
   .textbar img {
@@ -160,6 +143,7 @@ a:visited {
   }
   textarea {
       font-size: 1.0rem;
+      padding: 1rem 1rem 1rem 2rem;
   } 
 }
 

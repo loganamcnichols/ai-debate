@@ -10,67 +10,71 @@
   <script src="static/js/sse.min.js" defer></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body>
-  <main _="on load 
-           on scroll 
+<body  _="on scroll 
             if my scrollTop + my clientHeight is greater than my scrollHeight - 100 
               set userScrolling to true
             otherwise 
               set userScrolling to false
             end
-           on htmx:sseBeforeMessage
+          on load
+            window.scrollTo({ top: my.scrollHeight, behavior: 'smooth'})
+          on htmx:sseBeforeMessage
             call responseEvent(event)
-           on htmx:sseMessage 
-            if no userScrolling set my scrollTop to my scrollHeight then
+          on htmx:afterSwap
+            if no userScrolling 
+              window.scrollTo({ top: my.scrollHeight, behavior: 'smooth' })
             end
-           on htmx:sseClose send wakeUp to #user-input
-           on htmx:afterSettle set my scrollTop to my scrollHeight">
-    {{ if eq (len .QuestionRows) 0 }}
-    <div class="chat-row"
-         _="on load showIntroMsgs()
-               then showBotIntros()"></div>
-      <p id="intro-msg-one" class="intro-msg">
-        You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
-      </p>
-      <p id="intro-msg-two" class="intro-msg">
-        One is trained on the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement
-      </p>
-      <p id="intro-msg-three" class="intro-msg">
-        The other is trained on the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
-      </p>
-      <div class="response-left"></div>
-      <div class="response-right"></div>
-  {{ else }}
-  {{ range $i, $val := .QuestionRows }}
-  {{ if eq (mod $i 2) 0 }}
-    <div class="chat-row">
-      <p class="user-msg">{{ .UserMsg }}</p>
-      <div class="response-left">{{ .FirstResponse }}</div>
-      <div class="response-right">{{ .SecondResponse }}</div>
+          on htmx:sseMessage 
+            if no userScrolling 
+              window.scrollTo({ top: my.scrollHeight, behavior: 'smoot' }) 
+            end
+          on htmx:sseClose send wakeUp to #user-input
+          on htmx:afterSettle set my scrollTop to my scrollHeight">
+{{ if eq (len .QuestionRows) 0 }}
+  <div class="chat-row"
+        _="on load showIntroMsgs()
+              then showBotIntros()"></div>
+    <p id="intro-msg-one" class="intro-msg">
+      You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
+    </p>
+    <p id="intro-msg-two" class="intro-msg">
+      One is trained on the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement
+    </p>
+    <p id="intro-msg-three" class="intro-msg">
+      The other is trained on the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
+    </p>
+    <div class="response-left"></div>
+    <div class="response-right"></div>
+{{ else }}
+{{ range $i, $val := .QuestionRows }}
+{{ if eq (mod $i 2) 0 }}
+  <div class="chat-row">
+    <p class="user-msg">{{ .UserMsg }}</p>
+    <div class="response-left">{{ .FirstResponse }}</div>
+    <div class="response-right">{{ .SecondResponse }}</div>
+  </div>
+{{ else }}
+  <div class="chat-row">
+    <p class="user-msg">{{ .UserMsg }}</p>
+    <div class="response-left">{{ .FirstResponse }}</div>
+    <div class="response-right">{{ .SecondResponse }}</div>
+  </div>
+{{ end }}
+{{ end }}
+{{ end }}
+  <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
+        hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
+        _="on htmx:beforeRequest call inputEvent(event)">
+    <div class="textbar">
+      <textarea name="user-msg" id="user-input" rows="1" 
+      _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
+          on input set my *height to my scrollHeight px
+          on wakeUp remove @disabled"></textarea>
+      <button type="submit">
+        <img src="static/images/send.svg">
+      </button>
     </div>
-  {{ else }}
-    <div class="chat-row">
-      <p class="user-msg">{{ .UserMsg }}</p>
-      <div class="response-left">{{ .FirstResponse }}</div>
-      <div class="response-right">{{ .SecondResponse }}</div>
-    </div>
-  {{ end }}
-  {{ end }}
-  {{ end }}
-    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
-          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
-          _="on htmx:beforeRequest call inputEvent(event)">
-      <div class="textbar">
-        <textarea name="user-msg" id="user-input" rows="1" 
-        _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
-            on input set my *height to my scrollHeight px
-            on wakeUp remove @disabled"></textarea>
-        <button type="submit">
-          <img src="static/images/send.svg">
-        </button>
-      </div>
-    </form>
-  </main>
+  </form>
 
 <script type="text/hyperscript">
   def animateAppend(elt, x)
