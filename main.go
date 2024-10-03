@@ -44,6 +44,7 @@ var (
 	innovationFirstStmt *sql.Stmt
 	chatHistoryStmt     *sql.Stmt
 	updateChatStmt      *sql.Stmt
+	responseInsertStmt  *sql.Stmt
 	// Add more as needed
 )
 
@@ -275,13 +276,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 func createResponse() (uuid.UUID, error) {
 	randomValue := rand.Float64()
 	var query string
-	if randomValue > 0.5 {
-		query = "INSERT INTO response (first_move_innovation) VALUES (TRUE) RETURNING id"
-	} else {
-		query = "INSERT INTO response (first_move_innovation) VALUES (FALSE) RETURNING id"
-	}
 	var responseID uuid.UUID
-	err := db.QueryRow(query).Scan(&responseID)
+	err := responseInsertStmt.QueryRow(randomValue > 0.5).Scan(&responseID)
 	if err != nil {
 		return responseID, fmt.Errorf("error executing query %s: %v", query, err)
 	}
@@ -441,6 +437,11 @@ func main() {
 	updateChatStmt, err = db.Prepare(`UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3;`)
 	if err != nil {
 		log.Fatalf("Failed to prepare updateChatStmt: %v", err)
+	}
+
+	responseInsertStmt, err = db.Prepare(`INSERT INTO response (first_move_innovation) VALUES (TRUE) RETURNING id`)
+	if err != nil {
+		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
 	}
 
 	client = claude.NewClient()
