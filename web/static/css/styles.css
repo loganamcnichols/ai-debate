@@ -53,6 +53,7 @@
   .chat-row:last-of-type
   {
     min-height: 80vh;
+    padding-bottom: 20vh;
   }
   .user-msg       { align-self: center;     max-width: 70%; background-color: #374962; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
   .response-left  { align-self: flex-start; max-width: 70%; background-color: #375962; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
