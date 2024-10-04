@@ -18,7 +18,7 @@
             end
           on load            me.scrollIntoView({ block: 'end', behavior: 'smooth' })
           on htmx:afterSwap  me.scrollIntoView({ block: 'end', behavior: 'smooth' })
-          on htmx:sseMessage me.scrollIntoView({ block: 'end', behavior: 'smooth' })
+          on htmx:sseMessage me.scrollIntoView({ block: 'end', behavior: 'auto' })
           on htmx:sseBeforeMessage call responseEvent(event)
           on htmx:sseClose send wakeUp to #user-input">
 {{ if eq (len .QuestionRows) 0 }}
