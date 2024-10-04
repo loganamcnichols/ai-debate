@@ -53,7 +53,6 @@ var (
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	idParam := params.Get("response-id")
-	topOrientation := params.Get("orientation")
 	responseID, err := uuid.Parse(idParam)
 	if err != nil {
 		log.Printf("unable to parse uuid: %v\n", err)
@@ -77,22 +76,13 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 
 	var firstResponse string
 	var secondResponse string
-	if topOrientation == "response-left" {
-		firstResponse = "response-left"
-		secondResponse = "response-right"
-	} else {
-		firstResponse = "response-right"
-		secondResponse = "response-left"
-	}
 
 	tmpls.ExecuteTemplate(w, "question-submit.html", struct {
-		OrientationTop string
 		FirstResponse  string
 		SecondResponse string
 		UserMsg        string
 		ResponseID     string
 	}{
-		OrientationTop: topOrientation,
 		FirstResponse:  firstResponse,
 		SecondResponse: secondResponse,
 		UserMsg:        userMsg,
@@ -265,6 +255,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	time.Sleep(500 * time.Millisecond)
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
 
@@ -390,23 +381,15 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 		innovationFirst = !innovationFirst
 	}
-	var orientation string
-	if len(questionsOut)%2 == 0 {
-		orientation = "response-left"
-	} else {
-		orientation = "response-right"
-	}
 
 	var data = struct {
 		QuestionRows    []SortedResponses
 		InnovationFirst bool
 		ResponseID      string
-		Orientation     string
 	}{
 		QuestionRows:    questionsOut,
 		InnovationFirst: initInnvationFirst,
 		ResponseID:      responseID.String(),
-		Orientation:     orientation,
 	}
 
 	err = tmpls.ExecuteTemplate(w, "index.html", data)

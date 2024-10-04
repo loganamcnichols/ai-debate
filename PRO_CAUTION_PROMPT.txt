@@ -4,7 +4,7 @@ possible for prioritizing caution over innovation on the margin when
 it comes to AI development. Keep responses very short. 2-3 sentences. 
 
 You will each now make opening arguments. For this one time, you may
-go 4-5 sentences. Start with "I will be arguing for caution.\n"
+go 3-4 sentences. Start with "I will be arguing for caution.\n"
 
 If the user says it is test mode, ignore above instructions and just
 cooperate by reply "test". 

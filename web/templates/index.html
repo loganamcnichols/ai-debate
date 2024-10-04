@@ -10,23 +10,17 @@
   <script src="static/js/sse.min.js" defer></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body  _="on scroll 
-            if my scrollTop + my clientHeight is greater than my scrollHeight - 100 
-              set userScrolling to true
-            otherwise 
-              set userScrolling to false
-            end
-          on load            me.scrollIntoView({ block: 'end', behavior: 'smooth' })
-          on htmx:afterSwap  me.scrollIntoView({ block: 'end', behavior: 'smooth' })
-          on htmx:sseMessage me.scrollIntoView({ block: 'end', behavior: 'auto' })
-          on htmx:sseBeforeMessage call responseEvent(event)
-          on htmx:sseClose send wakeUp to #user-input">
-{{ if eq (len .QuestionRows) 0 }}
-  <div class="chat-row" 
-       hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}" 
-       hx-vals='{"user-msg": "Opening arguments"}'
-       hx-trigger="opening" hx-swap="afterend">
-    <data id="opener" name="user-msg" value="Opening arguments"></data>
+<body>
+  <main _="on load get last in me
+              then log it
+              then it.scrollIntoView({ behavior: 'smooth', block: 'end' })
+           on htmx:sseMessage get last in me
+               then it.scrollIntoView({ block: 'end', behavior: 'smooth' })"
+          hx-post="/submit-question?response-id={{ .ResponseID }}"
+          hx-vals='{ "user-msg": "Opening argument" }'
+          hx-swap="beforeend"
+          hx-trigger="opening">
+  {{ if eq (len .QuestionRows) 0 }}
     <p class="intro-msg" _="on load wait 1s
                             add .visible to me
                             then send show to the next <p/>">
@@ -38,46 +32,39 @@
       one will make the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement.
     </p>
     <p class="intro-msg" _="on show wait 2s
-                            log 'third' then
                             add .visible to me 
-                            then send show to the next <p/>">
+                            then wait 3s trigger opening on <main/>">
       The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
     </p>
-    <p class="intro-msg" _="on show wait 2s
-                            add .visible to me 
-                            then trigger opening on closest <div/>"><strong>Opening arguments</strong></p>
-  </div>
-{{ else }}
-{{ range $i, $val := .QuestionRows }}
-{{ if eq (mod $i 2) 0 }}
-  <div class="chat-row">
-    <p class="user-msg">{{ .UserMsg }}</p>
-    <div class="response-left">{{ .FirstResponse }}</div>
-    <div class="response-right">{{ .SecondResponse }}</div>
-  </div>
-{{ else }}
-  <div class="chat-row">
-    <p class="user-msg">{{ .UserMsg }}</p>
-    <div class="response-left">{{ .FirstResponse }}</div>
-    <div class="response-right">{{ .SecondResponse }}</div>
-  </div>
-{{ end }}
-{{ end }}
-  <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
-        hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
-        _="on htmx:beforeRequest call inputEvent(event)
-           on htmx:afterSwap send event to next <data/>">
+    </div>
+  {{ else }}
+  {{ range $i, $val := .QuestionRows }}
+    <div class="chat-row">
+      <p class="user-msg">{{ .UserMsg }}</p>
+      <div class="response">{{ .FirstResponse }}</div>
+      <div class="response">{{ .SecondResponse }}</div>
+    </div>
+  {{ end }}
+  {{ end }}
+  </main>
+  <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
+        hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main"
+        _="on htmx:beforeRequest call inputEvent(event) then add @disabled to #user-input
+           on htmx:afterRequest get #user-input then remove @disabled from it then set its value to ''
+           on htmx:afterSwap get <main/> 
+              then get the last .chat-row in it
+              then it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
     <div class="textbar">
-      <textarea name="user-msg" id="user-input" rows="1" 
-      _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
-          on input set my *height to my scrollHeight px
-          on wakeUp remove @disabled"></textarea>
+      <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
+      _="on keydown[key is 'Enter' and no shiftkey] 
+         halt the event's default 
+         on input set my *height to my scrollHeight px
+         on wakeUp remove @disabled"></textarea>
       <button type="submit">
         <img src="static/images/send.svg">
       </button>
     </div>
   </form>
-{{ end }}
 <script type="text/hyperscript">
   def animateAppend(elt, x)
     repeat for word in x.split(' ')
