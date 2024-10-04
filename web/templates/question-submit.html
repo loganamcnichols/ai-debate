@@ -5,7 +5,7 @@
   <div class="{{ .SecondResponse }}" sse-swap="second-response"></div>
 </div>
 <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .SecondResponse }}"
-      hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
+      hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML"
       _="on htmx:beforeRequest call inputEvent(event)">
   <div class="textbar">
     <textarea name="user-msg" id="user-input" rows="1" disabled
