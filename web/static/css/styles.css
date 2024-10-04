@@ -33,17 +33,40 @@ main
   -webkit-overflow-scrolling: touch;
 }
 
+
+footer
+{
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  transform: translateZ(0);
+  bottom: 0;
+  align-items: center;
+  gap: 1rem;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+}
+
 @media screen and (max-width: 1000px) { 
   body 
   { 
-    padding: 25% 5% 40% 5%;
+    padding: 10vh 5% 20vh 5%;
+  }
+  footer 
+  {
+    height: 20vh;
   }
 }
 @media screen and (min-width: 1000px)
 {
   body
   {
-    padding: 5% 25%; 
+    padding: 10vh 25% 10vh 25%; 
+  }
+  footer 
+  {
+    height: 15vh;
   }
 }
 
@@ -59,25 +82,24 @@ main
   min-height: 100%;
 }
 
-.user-msg{ align-self: center; max-width: 80%; background-color: #374962; border-radius: 20px; padding: 1rem; margin-top: 2rem;}
-.response{ max-width: 80%; border-radius: 20px; padding: 1rem; margin-top: 2rem; }
-.response:nth-child(odd)  { align-self: flex-start; background-color: #375962; }
-.response:nth-child(even) { align-self: flex-end;   background-color: #373E62; }
 
-footer
-{
-  display: flex;
-  flex-direction: column;
-  position: fixed;
-  transform: translateZ(0);
-  bottom: 0;
-  align-items: center;
-  gap: 2rem;
-  left: 0;
-  width: 100%;
-  height: 15vh;
-  z-index: 1000;
+button:hover {
+  cursor: pointer;
 }
+
+button:disabled
+{
+  cursor: default;
+}
+
+.msg { padding: 1rem; margin-top: 2rem; border-radius: 40px; max-width: 80%; }
+.chat-row                 > .msg:nth-child(1) { align-self: center;     background-color: #374962; }
+.chat-row:nth-child(odd)  > .msg:nth-child(2) { align-self: flex-start; background-color: #375962; }
+.chat-row:nth-child(odd)  > .msg:nth-child(3) { align-self: flex-end;   background-color: #373E62; }
+.chat-row:nth-child(even) > .msg:nth-child(2) { align-self: flex-end;   background-color: #373E62; }
+.chat-row:nth-child(even) > .msg:nth-child(3) { align-self: flex-start; background-color: #375962; }
+
+
 
 #suggestion-form > button
 {
@@ -86,6 +108,15 @@ footer
   border-radius: 10px;
   border: none;
   padding: 1rem;
+}
+
+#suggestion-form > button:disabled
+{
+  opacity: 50%;
+}
+#suggestion-form > button:enabled
+{
+  opacity: 100%;
 }
 
 #submission-form 
@@ -135,17 +166,16 @@ a:visited {
   border: none;
 }
 
-button:hover {
-  cursor: pointer;
-}
 
 .textbar:has(> textarea:disabled)
 {
-  background-color: #1B2431;
+  opacity: 50%;
+  cursor: default;
 }
 .textbar:has(> textarea:enabled)
 {
-  background-color: #253141;
+  opacity: 100%;
+  cursor: pointer;
 }
 
 textarea {

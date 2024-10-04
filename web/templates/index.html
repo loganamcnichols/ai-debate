@@ -40,22 +40,32 @@
   {{ else }}
   {{ range $i, $val := .QuestionRows }}
     <div class="chat-row">
-      <p class="user-msg">{{ .UserMsg }}</p>
-      <div class="response">{{ .FirstResponse }}</div>
-      <div class="response">{{ .SecondResponse }}</div>
+      <div class="msg">{{ .UserMsg }}</div>
+      <div class="msg">{{ .FirstResponse }}</div>
+      <div class="msg">{{ .SecondResponse }}</div>
     </div>
   {{ end }}
   {{ end }}
   </main>
-  <footer  _="on htmx:beforeRequest from <form/> call inputEvent(event) then add @disabled to #user-input
-              on htmx:afterRequest from <form/> get #user-input then remove @disabled from it then set its value to ''
-              on htmx:afterSwap from <form/> get <main/>
-                then get the last .chat-row in it
-                then it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
+  <footer  _="on htmx:beforeRequest log 'htmx:beforeRequest' 
+                 then call inputEvent(me) 
+                 then add @disabled to #user-input
+                 then get <button[type='submit']/> then add @disabled to it
+              on htmx:afterRequest log 'htmx:afterRequest' 
+                 then get #user-input 
+                 then set its value to ''
+              on htmx:afterSwap get <main/>
+                  then get the last .chat-row in event.detail.target
+                  then it.scrollIntoView({ block: 'end', behavior: 'smooth' })
+              on enable remove @disabled from #user-input
+                   then remove @disabled from <button[type='submit']/>">
     <form id="suggestion-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-swap="beforeend" hx-target="main"
-          _=""> 
-      <button type="submit" hx-trigger="every 5s, load" hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML">
+          hx-trigger="submit"> 
+      <button type="submit" hx-trigger="every 5s, load" hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
+              _="on htmx:beforeRequest halt the event's bubbling
+                 on htmx:afterRequest halt the event's bubbling
+                 on htmx:afterSwap halt the event's bubbling">
       </button>
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
@@ -139,6 +149,7 @@
 
   // Modified response event handler
   function responseEvent(event) {
+    console.log('response event');
     const msg = event.detail;
     if (msg.type == "innovation-first") {
       if (msg.data == "true") innovationFirst = true; 
@@ -156,8 +167,9 @@
   }
 
   // Updated input event handler
-  function inputEvent(event) {
-    const textarea = event.detail.elt.querySelector("#user-input");
+  function inputEvent(elt) {
+    console.log('input event');
+    const textarea = elt.querySelector("#user-input");
     const content = textarea.value;
     sendMessageToParent('user-input', content);
   }
