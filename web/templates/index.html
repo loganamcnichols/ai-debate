@@ -12,10 +12,7 @@
 </head>
 <body>
   <main _="on load get last in me
-              then log it
-              then it.scrollIntoView({ behavior: 'smooth', block: 'end' })
-           on htmx:sseMessage get last in me
-               then it.scrollIntoView({ block: 'end', behavior: 'smooth' })"
+              then it.scrollIntoView({ behavior: 'smooth', block: 'end' })"
           hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-vals='{ "user-msg": "Opening argument" }'
           hx-swap="beforeend"
