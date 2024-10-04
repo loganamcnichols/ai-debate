@@ -52,11 +52,11 @@ footer
 @media screen and (max-width: 1000px) { 
   body 
   { 
-    padding: 10vh 5% 20vh 5%;
+    padding: 10vh 5% 25vh 5%;
   }
   footer 
   {
-    height: 20vh;
+    height: 22vh;
   }
 }
 @media screen and (min-width: 1000px)
@@ -109,6 +109,7 @@ button:disabled
   border-radius: 10px;
   border: none;
   padding: 1rem;
+  font-size: 0.8rem;
 }
 
 #suggestion-form > button:disabled
