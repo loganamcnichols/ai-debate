@@ -45,19 +45,18 @@
   {{ end }}
   {{ end }}
   </main>
-  <footer  _="on htmx:beforeRequest get #user-input 
-                then call sendMessageToParent('user-input', it.value)
-                then add @disabled to it
-                then get <button[type='submit']/> 
-                then add @disabled to it
-              on htmx:afterRequest log 'htmx:afterRequest' 
-                 then get #user-input 
-                 then set its value to ''
+  <footer  _="on htmx:beforeRequest 
+                call sendMessageToParent('user-input', #user-input)
+                then add @disabled to #user-input
+                then add @disabled to <button[type='submit']/> 
+              on htmx:afterRequest 
+                get #user-input 
+                then set its value to ''
               on htmx:afterSwap get <main/>
-                  then get the last .chat-row in event.detail.target
-                  then it.scrollIntoView({ block: 'end', behavior: 'smooth' })
+                then get the last .chat-row in event.detail.target
+                then it.scrollIntoView({ block: 'end', behavior: 'smooth' })
               on enable remove @disabled from #user-input
-                   then remove @disabled from <button[type='submit']/>">
+                then remove @disabled from <button[type='submit']/>">
     <form id="suggestion-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-swap="beforeend" hx-target="main"
           hx-trigger="submit"> 
@@ -69,7 +68,7 @@
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main"
-          _="on htmx:beforeRequest get #user-input then if its value = '' halt the event end">
+          _="on htmx:beforeRequest get #user-input then if its value equals '' halt the event end">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
@@ -149,7 +148,6 @@
 
   // Modified response event handler
   function responseEvent(event) {
-    console.log('response event');
     const msg = event.detail;
     if (msg.type == "innovation-first") {
       if (msg.data == "true") innovationFirst = true; 
