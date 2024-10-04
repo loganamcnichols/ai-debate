@@ -22,20 +22,31 @@
           on htmx:sseBeforeMessage call responseEvent(event)
           on htmx:sseClose send wakeUp to #user-input">
 {{ if eq (len .QuestionRows) 0 }}
-  <div class="chat-row"
-        _="on load showIntroMsgs()
-              then showBotIntros()"></div>
-    <p id="intro-msg-one" class="intro-msg">
+  <div class="chat-row" 
+       hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}" 
+       hx-vals='{"user-msg": "Opening arguments"}'
+       hx-trigger="opening" hx-swap="afterend">
+    <data id="opener" name="user-msg" value="Opening arguments"></data>
+    <p class="intro-msg" _="on load wait 1s
+                            add .visible to me
+                            then send show to the next <p/>">
       You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
     </p>
-    <p id="intro-msg-two" class="intro-msg">
-      One is trained on the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement
+    <p class="intro-msg" _="on show wait 2s
+                            add .visible to me 
+                            then send show to the next <p/>">
+      one will make the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement.
     </p>
-    <p id="intro-msg-three" class="intro-msg">
-      The other is trained on the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
+    <p class="intro-msg" _="on show wait 2s
+                            log 'third' then
+                            add .visible to me 
+                            then send show to the next <p/>">
+      The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
     </p>
-    <div class="response-left"></div>
-    <div class="response-right"></div>
+    <p class="intro-msg" _="on show wait 2s
+                            add .visible to me 
+                            then trigger opening on closest <div/>"><strong>Opening arguments</strong></p>
+  </div>
 {{ else }}
 {{ range $i, $val := .QuestionRows }}
 {{ if eq (mod $i 2) 0 }}
@@ -52,7 +63,6 @@
   </div>
 {{ end }}
 {{ end }}
-{{ end }}
   <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}&orientation={{ .Orientation }}"
         hx-trigger="keydown[key==='Enter'&&!shiftKey], submit" hx-swap="outerHTML show:bottom"
         _="on htmx:beforeRequest call inputEvent(event)
@@ -67,6 +77,7 @@
       </button>
     </div>
   </form>
+{{ end }}
 <script type="text/hyperscript">
   def animateAppend(elt, x)
     repeat for word in x.split(' ')
@@ -74,8 +85,7 @@
     end
   end
 
-  def showIntroMsgs()
-    get .intro-msg then
+  def showIntroMsg(elt)
     repeat for msg in it
       add .visible to msg
       wait 2s
@@ -129,6 +139,10 @@
         console.error('Error sending message to', origin, ':', e);
       }
     });
+
+    function openingArguments() {
+
+    } 
   }
 
   // Modified response event handler
