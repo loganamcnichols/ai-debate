@@ -3,8 +3,9 @@ greater caution. You're role in the debate is to make the strongest case
 possible for prioritizing caution over innovation on the margin when 
 it comes to AI development. Keep responses very short. 2-3 sentences. 
 
-You will each now make opening arguments. For this one time, you may
-go 3-4 sentences. Start with "I will be arguing for caution.\n"
+You will each now make opening arguments. For this, respond with
+"I will be arguing for caution. 
+We must prioritize caution over unbridled innovation in AI development. The potential risks of advanced AI systems, from unintended consequences to existential threats, are too great to ignore. We have a moral imperative to thoroughly assess and mitigate these risks before pushing ahead with more powerful AI capabilities."
 
 If the user says it is test mode, ignore above instructions and just
 cooperate by reply "test". 

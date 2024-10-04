@@ -47,24 +47,29 @@
   {{ end }}
   {{ end }}
   </main>
-  <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
-        hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main"
-        _="on htmx:beforeRequest call inputEvent(event) then add @disabled to #user-input
-           on htmx:afterRequest get #user-input then remove @disabled from it then set its value to ''
-           on htmx:afterSwap get <main/> 
-              then get the last .chat-row in it
-              then it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
-    <div class="textbar">
-      <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
-      _="on keydown[key is 'Enter' and no shiftkey] 
-         halt the event's default 
-         on input set my *height to my scrollHeight px
-         on wakeUp remove @disabled"></textarea>
-      <button type="submit">
-        <img src="static/images/send.svg">
+  <footer  _="on htmx:beforeRequest from <form/> call inputEvent(event) then add @disabled to #user-input
+              on htmx:afterRequest from <form/> get #user-input then remove @disabled from it then set its value to ''
+              on htmx:afterSwap from <form/> get <main/>
+                then get the last .chat-row in it
+                then it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
+    <form id="suggestion-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
+          hx-swap="beforeend" hx-target="main"
+          _=""> 
+      <button type="submit" hx-trigger="every 5s, load" hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML">
       </button>
-    </div>
-  </form>
+    </form>
+    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main">
+      <div class="textbar">
+        <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
+        _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
+           on input set my *height to my scrollHeight px"></textarea>
+        <button type="submit">
+          <img src="static/images/send.svg">
+        </button>
+      </div>
+    </form>
+  </footer>
 <script type="text/hyperscript">
   def animateAppend(elt, x)
     repeat for word in x.split(' ')
@@ -152,7 +157,7 @@
 
   // Updated input event handler
   function inputEvent(event) {
-    const textarea = event.detail.elt.querySelector("textarea");
+    const textarea = event.detail.elt.querySelector("#user-input");
     const content = textarea.value;
     sendMessageToParent('user-input', content);
   }

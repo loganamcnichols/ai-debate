@@ -50,6 +50,22 @@ var (
 	// Add more as needed
 )
 
+func promptSuggest(w http.ResponseWriter, r *http.Request) {
+	prompts := []string{
+		"What do you see as the most significant risks and rewards if AI development continues at its current speed?",
+		"Do you think current AI safety measures are insufficient?",
+		"What has been the impact of existing regulations on AI?",
+		"What do AI experts think about the current pace of AI progress?",
+		"What would be stand to gain by slowing down? What would we stand to loose?",
+	}
+	choice := prompts[rand.Intn(len(prompts))]
+	err := tmpls.ExecuteTemplate(w, "question-suggestion.html", choice)
+	if err != nil {
+		log.Printf("failed to execute template 'question-suggestion': %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
 	idParam := params.Get("response-id")
@@ -465,6 +481,7 @@ func main() {
 	r.HandleFunc("/", handleIndex)
 	r.HandleFunc("/submit-question", submitQuestion)
 	r.HandleFunc("/chat-response", streamResponse)
+	r.HandleFunc("/prompt-suggestion", promptSuggest)
 
 	// Serve static files
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("web")))
