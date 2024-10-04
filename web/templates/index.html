@@ -46,7 +46,7 @@
   {{ end }}
   </main>
   <footer  _="on htmx:beforeRequest 
-                call sendMessageToParent('user-input', #user-input)
+                call sendMessageToParent('user-input', #user-input.value)
                 then add @disabled to #user-input
                 then add @disabled to <button[type='submit']/> 
               on htmx:afterRequest 
