@@ -1,7 +1,8 @@
 <div hx-ext="sse" sse-connect="/chat-response?response-id={{ .ResponseID }}" sse-close="close" class="chat-row"
      _="on htmx:sseMessage me.scrollIntoView({ block: 'end', behavior: 'smooth' }) 
         on htmx:sseBeforeMessage call responseEvent(event)
-        on htmx:sseClose scrollIntoView({ block: 'end', behavior: 'smooth' }) then send enable to <footer/>" hx-swap="innerHTML">
+        on htmx:sseClose me.scrollIntoView({ block: 'end', behavior: 'smooth' }) 
+           then send enable to <footer/>" hx-swap="innerHTML">
   <div class="msg">{{ .UserMsg }}</div>
   <div class="msg" sse-swap="first-response"></div>
   <div class="msg" sse-swap="second-response"></div>
