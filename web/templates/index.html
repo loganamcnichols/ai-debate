@@ -45,10 +45,11 @@
   {{ end }}
   {{ end }}
   </main>
-  <footer  _="on htmx:beforeRequest log 'htmx:beforeRequest' 
-                 then call inputEvent(me) 
-                 then add @disabled to #user-input
-                 then get <button[type='submit']/> then add @disabled to it
+  <footer  _="on htmx:beforeRequest get #user-input 
+                then call sendMessageToParent('user-input', it.value)
+                then add @disabled to it
+                then get <button[type='submit']/> 
+                then add @disabled to it
               on htmx:afterRequest log 'htmx:afterRequest' 
                  then get #user-input 
                  then set its value to ''
@@ -67,7 +68,8 @@
       </button>
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
-          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main">
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main"
+          _="on htmx:beforeRequest get #user-input then if its value = '' halt the event end">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
@@ -162,14 +164,6 @@
       if (innovationFirst) sendMessageToParent('caution-response', msg.data);
       else                 sendMessageToParent('innovation-response', msg.data);
     }
-  }
-
-  // Updated input event handler
-  function inputEvent(elt) {
-    console.log('input event');
-    const textarea = elt.querySelector("#user-input");
-    const content = textarea.value;
-    sendMessageToParent('user-input', content);
   }
 </script>
 </body>

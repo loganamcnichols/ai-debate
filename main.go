@@ -52,11 +52,10 @@ var (
 
 func promptSuggest(w http.ResponseWriter, r *http.Request) {
 	prompts := []string{
-		"What do you see as the most significant risks and rewards if AI development continues at its current speed?",
-		"Do you think current AI safety measures are insufficient?",
-		"What has been the impact of existing regulations on AI?",
-		"What do AI experts think about the current pace of AI progress?",
-		"What would be stand to gain by slowing down? What would we stand to loose?",
+		"If AI keeps improving at its current speed what will happen?",
+		"Do you think the current level of AI safety is enough?",
+		"What has been the impact of laws about AI?",
+		"What would happen if we slowed down AI?",
 	}
 	choice := prompts[rand.Intn(len(prompts))]
 	err := tmpls.ExecuteTemplate(w, "question-suggestion.html", choice)
