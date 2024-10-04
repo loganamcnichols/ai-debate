@@ -264,7 +264,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		Messages:  claude.F(messages),
 	})
 
-	firstAnswer, err = writeStreamWithInterval(w, stream, "first-response", 200*time.Millisecond)
+	firstAnswer, err = writeStreamWithInterval(w, stream, "first-response", 500*time.Millisecond)
 	if err != nil {
 		log.Printf("error executing updateChatStmt: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -281,7 +281,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
-	secondAnswer, err = writeStreamWithInterval(w, stream, "second-response", 200*time.Millisecond)
+	secondAnswer, err = writeStreamWithInterval(w, stream, "second-response", 500*time.Millisecond)
 	if err != nil {
 		log.Printf("error executing updateChatStmt: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
