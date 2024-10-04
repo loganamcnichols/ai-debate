@@ -27,6 +27,7 @@ body
 main
 {
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   overflow-y: auto;  
@@ -155,6 +156,16 @@ a:visited {
   background-color: #253141;
   border-radius: 80px;
   padding: 0rem 1rem 0rem 2rem;
+}
+
+.intro-msgs
+{
+  align-self: center;
+}
+
+.intro-msg
+{
+  text-align: center;
 }
 
 .textbar > textarea {
