@@ -81,7 +81,6 @@ footer
 .chat-row:last-of-type
 {
   min-height: 100%;
-  padding-bottom: 4rem;
 }
 
 
@@ -94,7 +93,7 @@ button:disabled
   cursor: default;
 }
 
-.msg { padding: 1rem; margin-top: 1rem; border-radius: 40px; max-width: 80%; }
+.msg { padding: 1rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border-radius: 40px; max-width: 80%; }
 .chat-row                 > .msg:nth-child(1) { align-self: center;     background-color: #374962; }
 .chat-row:nth-child(odd)  > .msg:nth-child(2) { align-self: flex-start; background-color: #375962; }
 .chat-row:nth-child(odd)  > .msg:nth-child(3) { align-self: flex-end;   background-color: #373E62; }
