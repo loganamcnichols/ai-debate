@@ -45,35 +45,43 @@
   {{ end }}
   {{ end }}
   </main>
-  <footer  _="on htmx:beforeRequest 
-                call sendMessageToParent('user-input', #user-input.value)
-                then add @disabled to #user-input
-                then add @disabled to <button[type='submit']/> 
-              on htmx:afterRequest 
-                get #user-input 
-                then set its value to ''
-              on htmx:afterSwap get <main/>
-                then get the last .chat-row in event.detail.target
-                then it.scrollIntoView({ block: 'end', behavior: 'smooth' })
-              on enable remove @disabled from #user-input
-                then remove @disabled from <button[type='submit']/>">
+  <footer>
     <form id="suggestion-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-swap="beforeend" hx-target="main"
-          hx-trigger="submit"> 
-      <button type="submit" hx-trigger="every 5s, load" hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
+          hx-trigger="submit"
+           _="on htmx:beforeRequest 
+                add @disabled to <#prompt-button,#input-button,#user-input/> then
+                call sendMessageToParent('user-input', #prompt-button.value)
+              on htmx:afterSwap from me 
+                get the last .chat-row in event.detail.target then
+                it.scrollIntoView({ block: 'end', behavior: 'smooth' })"> 
+      <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
+              hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
+              {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}
               _="on htmx:beforeRequest halt the event's bubbling
                  on htmx:afterRequest halt the event's bubbling
-                 on htmx:afterSwap halt the event's bubbling" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}>
-      </button>
+                 on htmx:afterSwap halt the event's bubbling"></button>
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
-          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" hx-swap="beforeend" hx-target="main"
-          _="on htmx:beforeRequest get #user-input then if its value equals '' halt the event end">
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
+          hx-swap="beforeend" hx-target="main"
+           _="on htmx:beforeRequest get #user-input then 
+                if its value equals '' 
+                  halt the event 
+                else 
+                  call sendMesasgeToParent('user-input', #user-input.value) then
+                  add @disabled to <#prompt-button,#input-button,#user-input/>
+                end
+              on htmx:afterRequest
+                set #user-input's value to ''
+              on htmx:afterSwap
+                get the last .chat-row in event.detail.target then
+                it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
            on input set my *height to my scrollHeight px" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}></textarea>
-        <button type="submit" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}>
+        <button id="input-button" type="submit" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}>
           <img src="static/images/send.svg">
         </button>
       </div>
@@ -130,9 +138,6 @@
     if (!isInIframe()) {
       return;
     }
-
-    console.log('Attempting to send message to parent:', { type, content });
-    
     allowedOrigins.forEach(origin => {
       try {
         window.parent.postMessage({ type, content }, origin);
