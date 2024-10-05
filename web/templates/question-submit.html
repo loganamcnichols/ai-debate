@@ -5,7 +5,7 @@
         then responseEvent(event)
         then wait 100ms me.scrollIntoView({ block: 'end', behavior: 'auto' })" hx-swap="innerHTML">
   <div class="msg">{{ .UserMsg }}</div>
-  <div class="msg" sse-swap="first-response" hx-swap="beforeend"></div>
-  <div class="msg" sse-swap="second-response" hx-swap="beforeend"></div>
+  <div class="msg" sse-swap="first-response"></div>
+  <div class="msg" sse-swap="second-response"></div>
   <data sse-swap="innovation-first"></data>
 </div>

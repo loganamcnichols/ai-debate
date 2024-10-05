@@ -265,22 +265,12 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		Messages:  claude.F(messages),
 	})
 
-	for stream.Next() {
-		event := stream.Current()
-		switch delta := event.Delta.(type) {
-		case claude.ContentBlockDeltaEventDelta:
-			if delta.Text != "" {
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", delta.Text)
-			}
-		}
+	firstAnswer, err = writeStreamWithInterval(w, stream, "first-response", 200*time.Millisecond)
+	if err != nil {
+		log.Printf("error executing updateChatStmt: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
-
-	// firstAnswer, err = writeStreamWithInterval(w, stream, "first-response", 200*time.Millisecond)
-	// if err != nil {
-	// 	log.Printf("error executing updateChatStmt: %v", err)
-	// 	http.Error(w, "internal server error", http.StatusInternalServerError)
-	// 	return
-	// }
 
 	time.Sleep(200 * time.Millisecond)
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
@@ -292,23 +282,12 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
-
-	for stream.Next() {
-		event := stream.Current()
-		switch delta := event.Delta.(type) {
-		case claude.ContentBlockDeltaEventDelta:
-			if delta.Text != "" {
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", delta.Text)
-			}
-		}
+	secondAnswer, err = writeStreamWithInterval(w, stream, "second-response", 200*time.Millisecond)
+	if err != nil {
+		log.Printf("error executing updateChatStmt: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
-
-	// secondAnswer, err = writeStreamWithInterval(w, stream, "second-response", 200*time.Millisecond)
-	// if err != nil {
-	// 	log.Printf("error executing updateChatStmt: %v", err)
-	// 	http.Error(w, "internal server error", http.StatusInternalServerError)
-	// 	return
-	// }
 
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
