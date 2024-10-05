@@ -11,8 +11,9 @@
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
 <body>
-  <main _="on load get last in me
-              then it.scrollIntoView({ behavior: 'smooth', block: 'end' })"
+  <main  _="on load get last in me
+              then it.scrollIntoView({ behavior: 'smooth', block: 'end' })
+            on opening call sendMesasgeToParent('user-input', 'Opening argument')"
           hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-vals='{ "user-msg": "Opening argument" }'
           hx-swap="beforeend"
