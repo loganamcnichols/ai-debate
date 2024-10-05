@@ -13,9 +13,9 @@ CREATE TABLE response (
 CREATE TABLE chat (
   id SERIAL PRIMARY KEY,
   response_id UUID REFERENCES response(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  user_msg TEXT,
-  caution_msg TEXT,
-  innovation_msg TEXT,
+  user_msg TEXT NOT NULL,
+  caution_msg TEXT DEFAULT '',
+  innovation_msg TEXT DEFAULT '',
   created_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

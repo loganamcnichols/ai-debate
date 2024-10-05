@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -15,19 +16,30 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/sashabaranov/go-openai"
 
-	claude "github.com/anthropics/anthropic-sdk-go"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 type QuestionRow struct {
-	QuestionID    int
-	ResponseID    uuid.UUID
-	UserMsg       string
-	CautionMsg    string
-	InnovationMsg string
-	TimeStamp     time.Time
+	QuestionID    int       `db:"id"`
+	ResponseID    uuid.UUID `db:"response_id"`
+	UserMsg       string    `db:"user_msg"`
+	CautionMsg    string    `db:"caution_msg"`
+	InnovationMsg string    `db:"innovation_msg"`
+	CreateTime    time.Time `db:"create_time"`
+}
+
+func (q *QuestionRow) Scan(rows *sql.Rows) error {
+	return rows.Scan(
+		&q.QuestionID,
+		&q.ResponseID,
+		&q.UserMsg,
+		&q.CautionMsg,
+		&q.InnovationMsg,
+		&q.CreateTime,
+	)
 }
 
 type SortedResponses struct {
@@ -37,7 +49,8 @@ type SortedResponses struct {
 	InnovationFirst bool
 }
 
-var client *claude.Client
+// var client *claude.Client
+var client *openai.Client
 var tmpls *template.Template
 var db *sql.DB
 
@@ -120,17 +133,51 @@ func convertToParagraphs(text string) string {
 	return strings.Join(lines, "")
 }
 
-func streamResponse(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	// Ensure the writer supports flushing
+func formatFirstMessage(firstMessage string, firstBot string) string {
+	return fmt.Sprintf("Our next question is: \"%s\". %s will response first.", firstMessage, firstBot)
+}
+
+func formatSecondMessage(secondBot string) string {
+	return fmt.Sprintf("Now, %s will respond.", secondBot)
+}
+
+func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionStream, eventName string) (text string, err error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	for {
+		var res openai.ChatCompletionStreamResponse
+		res, err = stream.Recv()
+		if errors.Is(err, io.EOF) {
+			err = nil
+			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
+			flusher.Flush()
+			return
+		}
+
+		if err != nil {
+			return
+		}
+
+		text += res.Choices[0].Delta.Content
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
+		flusher.Flush()
+	}
+}
+
+func streamResponse(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	// Ensure the writer supports flushing
 	idParam := r.URL.Query().Get("response-id")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
 
 	responseID, err := uuid.Parse(idParam)
 	if err != nil {
@@ -155,44 +202,107 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var messages []claude.MessageParam
-	var questionID int
-	var formattedQuestion, formattedTransition, firstAnswer, secondAnswer string
+	if !rows.Next() {
+		log.Println(fmt.Errorf("no rows found during scan, this shouldn't be possible"))
+		return
+	}
 
-	for rows.Next() {
-		var nextRow QuestionRow
-		rows.Scan(&questionID, &nextRow.ResponseID, &nextRow.UserMsg, &nextRow.CautionMsg, &nextRow.InnovationMsg, &nextRow.TimeStamp)
-		if innovateFirst {
-			formattedQuestion = fmt.Sprintf("The user asks '%s'. The innovation team will respond first.", nextRow.UserMsg)
-			formattedTransition = "Now the caution team will have an opportunity for rebuttle."
-			firstAnswer = nextRow.InnovationMsg
-			secondAnswer = nextRow.CautionMsg
-		} else {
-			formattedQuestion = fmt.Sprintf("The user asks '%s'. The caution team will respond first.", nextRow.UserMsg)
-			formattedTransition = "Now the innovation team will have an opportunity for rebuttle."
-			firstAnswer = nextRow.CautionMsg
-			secondAnswer = nextRow.InnovationMsg
+	messages := []openai.ChatCompletionMessage{{}}
+	var nextRow QuestionRow
+	var firstAnswer, secondAnswer string
+	for {
+		if err := nextRow.Scan(rows); err != nil {
+			log.Printf("error in during scan: %v", err)
+			return
 		}
-		if firstAnswer == "" || secondAnswer == "" {
+
+		if innovateFirst {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "user",
+				Content: formatFirstMessage(nextRow.UserMsg, "Innovate Bot"),
+			})
+		} else {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "user",
+				Content: formatFirstMessage(nextRow.UserMsg, "Caution Bot"),
+			})
+		}
+
+		if !rows.Next() {
 			break
 		}
 
-		messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedQuestion)))
-		messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
-		messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
-		messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(secondAnswer)))
+		if innovateFirst {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "assistant",
+				Name:    "InnovateBot",
+				Content: formatFirstMessage(nextRow.InnovationMsg, "Innovate Bot"),
+			})
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "user",
+				Content: formatSecondMessage("Caution Bot"),
+			})
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "assistant",
+				Name:    "CautionBot",
+				Content: nextRow.CautionMsg,
+			})
+		} else {
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "assistant",
+				Name:    "CautionBot",
+				Content: nextRow.CautionMsg,
+			})
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "user",
+				Content: formatSecondMessage("Innovate Bot"),
+			})
+
+			messages = append(messages, openai.ChatCompletionMessage{
+				Role:    "assistant",
+				Name:    "InnovateBot",
+				Content: nextRow.InnovationMsg,
+			})
+		}
 
 		innovateFirst = !innovateFirst
 	}
 
+	if rows.Err() != nil {
+		log.Printf("error iterating on rows: %v", rows.Err())
+	}
+
+	log.Printf("user message %s\n", messages[len(messages)-1].Content)
+
 	var firstPromptFile string
 	var secondPromptFile string
+
+	var firstBotName string
+	var secondBotName string
+
 	if innovateFirst {
 		firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
 		secondPromptFile = "PRO_CAUTION_PROMPT.txt"
+
+		firstBotName = "InnovateBot"
+		secondBotName = "CautionBot"
+
+		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
+
+		flusher.Flush()
+
 	} else {
 		firstPromptFile = "PRO_CAUTION_PROMPT.txt"
 		secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
+
+		firstBotName = "CautionBot"
+		secondBotName = "InnovateBot"
+
+		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
+		flusher.Flush()
 	}
 
 	firstSystemPrompt, err := os.ReadFile(firstPromptFile)
@@ -204,74 +314,72 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		log.Printf("unable to read caution prompt: %v", err)
 	}
 
-	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedQuestion)))
-
-	if innovateFirst {
-		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
-		flusher.Flush()
-	} else {
-		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
-		flusher.Flush()
+	messages[0] = openai.ChatCompletionMessage{
+		Role:    "system",
+		Content: string(firstSystemPrompt),
 	}
 
-	stream := client.Messages.NewStreaming(context.TODO(), claude.MessageNewParams{
-		Model:     claude.F(claude.ModelClaude_3_5_Sonnet_20240620),
-		MaxTokens: claude.Int(1024),
-		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(firstSystemPrompt))}),
-		Messages:  claude.F(messages),
-	})
-	if stream.Err() != nil {
-		log.Printf("Error while creating response stream from anthropic: %v", stream.Err())
+	req := openai.ChatCompletionRequest{
+		Model:    openai.GPT4oMini20240718,
+		Messages: messages,
+		Stream:   true,
+	}
+	stream1, err := client.CreateChatCompletionStream(context.Background(), req)
+	if err != nil {
+		log.Printf("ChatCompletionStream error: %v\n", err)
 		return
 	}
 
-	for stream.Next() {
-		event := stream.Current()
-		switch delta := event.Delta.(type) {
-		case claude.ContentBlockDeltaEventDelta:
-			if delta.Text != "" {
-				firstAnswer += delta.Text
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", convertToParagraphs(firstAnswer))
-				flusher.Flush()
-			}
-		}
-	}
+	defer stream1.Close()
 
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", convertToParagraphs(firstAnswer))
-	flusher.Flush()
-
-	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
-	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
-
-	stream = client.Messages.NewStreaming(context.TODO(), claude.MessageNewParams{
-		Model:     claude.F(claude.ModelClaude_3_5_Sonnet_20240620),
-		MaxTokens: claude.Int(1024),
-		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
-		Messages:  claude.F(messages),
-	})
-
-	if stream.Err() != nil {
-		log.Printf("error creating stream from Anthropic: %v\n", err)
+	firstAnswer, err = streamOpenaiResponse(w, stream1, "first-response")
+	if err != nil {
+		log.Printf("error streaming openai response: %v\n", err)
 		return
 	}
 
-	for stream.Next() {
-		event := stream.Current()
-		switch delta := event.Delta.(type) {
-		case claude.ContentBlockDeltaEventDelta:
-			if delta.Text != "" {
-				secondAnswer += delta.Text
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "second-response", convertToParagraphs(secondAnswer))
-				flusher.Flush()
-			}
-		}
+	log.Printf("first answer%s\n", firstAnswer)
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    "assistant",
+		Name:    firstBotName,
+		Content: firstAnswer,
+	})
+
+	messages = append(messages, openai.ChatCompletionMessage{
+		Role:    "user",
+		Content: formatSecondMessage(secondBotName),
+	})
+
+	messages[0] = openai.ChatCompletionMessage{
+		Role:    "system",
+		Content: string(secondSystemPrompt),
 	}
 
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "second-response", convertToParagraphs(secondAnswer))
-	flusher.Flush()
+	req = openai.ChatCompletionRequest{
+		Model:    openai.GPT4oMini20240718,
+		Messages: messages,
+		Stream:   true,
+	}
+
+	stream2, err := client.CreateChatCompletionStream(context.Background(), req)
+	if err != nil {
+		log.Printf("ChatCompletionStream error: %v\n", err)
+		return
+	}
+
+	defer stream2.Close()
+
+	secondAnswer, err = streamOpenaiResponse(w, stream2, "second-response")
+	if err != nil {
+		log.Printf("error streaming openai response: %v\n", err)
+		return
+	}
+
+	log.Printf("second answer%s\n", secondAnswer)
 
 	if innovateFirst {
-		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
+		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, nextRow.QuestionID)
 		log.Println("update complete")
 		if err != nil {
 			log.Printf("error executing updateChatStmt: %v", err)
@@ -279,7 +387,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		_, err := updateChatStmt.Exec(secondAnswer, firstAnswer, questionID)
+		_, err := updateChatStmt.Exec(secondAnswer, firstAnswer, nextRow.QuestionID)
 		log.Println("update complete")
 		if err != nil {
 			log.Printf("error executing updateChatStmt: %v", err)
@@ -360,8 +468,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	initInnvationFirst := innovationFirst
 	for res.Next() {
 		var nextRow QuestionRow
-		res.Scan(&nextRow.QuestionID, &nextRow.ResponseID, &nextRow.UserMsg,
-			&nextRow.CautionMsg, &nextRow.InnovationMsg, &nextRow.TimeStamp)
+		if err := nextRow.Scan(res); err != nil {
+			log.Printf("error scanning row: %v\n", err)
+			return
+		}
 		if innovationFirst {
 			questionsOut = append(questionsOut, SortedResponses{
 				UserMsg:         nextRow.UserMsg,
@@ -472,7 +582,7 @@ func main() {
 		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
 	}
 
-	client = claude.NewClient()
+	client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	r := mux.NewRouter()
 
