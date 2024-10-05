@@ -15,7 +15,8 @@ CREATE TABLE chat (
   response_id UUID REFERENCES response(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   user_msg TEXT,
   caution_msg TEXT,
-  innovation_msg TEXT
+  innovation_msg TEXT,
+  created_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create an index on the foreign key for better performance

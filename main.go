@@ -480,7 +480,7 @@ func main() {
 		log.Fatalf("Failed to prepare innovationFirstStmt: %v", err)
 	}
 
-	chatHistoryStmt, err = db.Prepare(`SELECT * FROM chat WHERE response_id = $1;`)
+	chatHistoryStmt, err = db.Prepare(`SELECT * FROM chat WHERE response_id = $1 ORDER BY created_time;`)
 	if err != nil {
 		log.Fatalf("Failed to prepare chatHistoryStmt: %v", err)
 	}
