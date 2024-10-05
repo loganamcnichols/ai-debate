@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import random
 
-AI_DEBATE = "https://ai-debate.org"
+AI_DEBATE = "http://localhost:8080"
 
 QUESTIONS = [
     "If AI keeps improving at its current speed what will happen?",
