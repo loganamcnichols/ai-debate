@@ -28,12 +28,12 @@
       <p class="intro-msg" _="on show wait 2s
                               add .visible to me 
                               then send show to the next <p/>">
-        one will make the strongest arguments for to prioritize greater <strong>caution</strong> in AI developement.
+        one will make the strongest arguments for to prioritize greater <strong>caution</strong> in AI development.
       </p>
       <p class="intro-msg" _="on show wait 2s
                               add .visible to me 
                               then wait 3s trigger opening on <main/>">
-        The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI developement.
+        The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI development.
       </p>
     </div>
   {{ else }}
@@ -88,36 +88,6 @@
       </div>
     </form>
   </footer>
-<script type="text/hyperscript">
-  def animateAppend(elt, x)
-    repeat for word in x.split(' ')
-      wait 100ms append word + ' ' to elt's innerHTML
-    end
-  end
-
-  def showIntroMsg(elt)
-    repeat for msg in it
-      add .visible to msg
-      wait 2s
-    end
-  end
-
-  def showBotIntros()
-  {{ if .InnovationFirst }}
-    set first_msg to "I will be arguing for greater <strong>innovation</strong>..."
-    set second_msg to "and I will be arguing for greater <strong>caution</strong>."
-  {{ else }}
-    set first_msg to "I will be arguing for greater <strong>caution</strong>..."
-    set second_msg to "and I will be arguing for greater <strong>innovation</strong>."
-  {{ end }}
-    log 'first message'
-    get the first .response-left then
-    call animateAppend(it, first_msg)
-    wait 200ms
-    get the first .response-right then
-    call animateAppend(it, second_msg)
-  end
-</script>
 <script>
 
   let innovationFirst = true;
