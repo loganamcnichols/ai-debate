@@ -28,6 +28,7 @@ type QuestionRow struct {
 	UserMsg       string
 	CautionMsg    string
 	InnovationMsg string
+	TimeStamp     time.Time
 }
 
 type SortedResponses struct {
@@ -175,8 +176,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	idParam := r.URL.Query().Get("response-id")
 
-	log.Printf("Got responseID %s in stream", idParam)
-
 	responseID, err := uuid.Parse(idParam)
 	if err != nil {
 		log.Printf("unable to parse resopnse-id %s: %v\n", idParam, err)
@@ -191,8 +190,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("got response %t from innovate first query", innovateFirst)
 
 	rows, err := chatHistoryStmt.Query(responseID)
 	if err != nil {
@@ -209,7 +206,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		log.Printf("processing row")
 		var nextRow QuestionRow
-		rows.Scan(&questionID, &nextRow.ResponseID, &nextRow.UserMsg, &nextRow.CautionMsg, &nextRow.InnovationMsg)
+		rows.Scan(&questionID, &nextRow.ResponseID, &nextRow.UserMsg, &nextRow.CautionMsg, &nextRow.InnovationMsg, &nextRow.TimeStamp)
 		if innovateFirst {
 			formattedQuestion = fmt.Sprintf("The user asks '%s'. The innovation team will respond first.", nextRow.UserMsg)
 			formattedTransition = "Now the caution team will have an opportunity for rebuttle."
@@ -232,8 +229,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 		innovateFirst = !innovateFirst
 	}
-
-	log.Printf("innovate first came out %t", innovateFirst)
 
 	var firstPromptFile string
 	var secondPromptFile string
@@ -277,8 +272,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
-	log.Printf("processed first answer: %s", firstAnswer)
 
 	time.Sleep(200 * time.Millisecond)
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
