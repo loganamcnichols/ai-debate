@@ -52,7 +52,7 @@
           hx-trigger="submit"
            _="on htmx:beforeRequest 
                 add @disabled to <#prompt-button,#input-button,#user-input/> then
-                call sendMessageToParent('user-input', #prompt-button.value)
+                call sendMessageToParent('user-input', #hidden-msg.value)
               on htmx:afterSwap from me 
                 get the last .chat-row in event.detail.target then
                 it.scrollIntoView({ block: 'end', behavior: 'smooth' })"> 
