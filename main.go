@@ -204,7 +204,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	var formattedQuestion, formattedTransition, firstAnswer, secondAnswer string
 
 	for rows.Next() {
-		log.Printf("processing row")
 		var nextRow QuestionRow
 		rows.Scan(&questionID, &nextRow.ResponseID, &nextRow.UserMsg, &nextRow.CautionMsg, &nextRow.InnovationMsg, &nextRow.TimeStamp)
 		if innovateFirst {
@@ -290,7 +289,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Processed second answer %s:", secondAnswer)
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
 		log.Println("update complete")
@@ -382,7 +380,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	for res.Next() {
 		var nextRow QuestionRow
 		res.Scan(&nextRow.QuestionID, &nextRow.ResponseID, &nextRow.UserMsg,
-			&nextRow.CautionMsg, &nextRow.InnovationMsg)
+			&nextRow.CautionMsg, &nextRow.InnovationMsg, &nextRow.TimeStamp)
 		if innovationFirst {
 			questionsOut = append(questionsOut, SortedResponses{
 				UserMsg:         nextRow.UserMsg,
