@@ -17,7 +17,6 @@ import (
 	"github.com/gorilla/mux"
 
 	claude "github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
@@ -119,48 +118,6 @@ func convertToParagraphs(text string) string {
 
 	// Join the lines back together without any line breaks
 	return strings.Join(lines, "")
-}
-
-func writeStreamWithInterval(w io.Writer, stream *ssestream.Stream[claude.MessageStreamEvent], eventName string, interval time.Duration) (string, error) {
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return "", fmt.Errorf("writer does not implement http.Flusher")
-	}
-
-	var fullContent string
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	done := make(chan bool)
-	go func() {
-		for stream.Next() {
-			event := stream.Current()
-			switch delta := event.Delta.(type) {
-			case claude.ContentBlockDeltaEventDelta:
-				if delta.Text != "" {
-					fullContent += delta.Text
-				}
-			}
-		}
-		done <- true
-	}()
-
-	for {
-		select {
-		case <-ticker.C:
-			if fullContent != "" {
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(fullContent))
-				flusher.Flush()
-			}
-		case <-done:
-			// Final write
-			if fullContent != "" {
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(fullContent))
-				flusher.Flush()
-			}
-			return fullContent, nil
-		}
-	}
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
@@ -265,14 +222,21 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		Messages:  claude.F(messages),
 	})
 
-	firstAnswer, err = writeStreamWithInterval(w, stream, "first-response", 200*time.Millisecond)
-	if err != nil {
-		log.Printf("error executing updateChatStmt: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+	for stream.Next() {
+		event := stream.Current()
+		switch delta := event.Delta.(type) {
+		case claude.ContentBlockDeltaEventDelta:
+			if delta.Text != "" {
+				firstAnswer += delta.Text
+				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", convertToParagraphs(firstAnswer))
+				flusher.Flush()
+			}
+		}
 	}
 
-	time.Sleep(200 * time.Millisecond)
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "first-response", convertToParagraphs(firstAnswer))
+	flusher.Flush()
+
 	messages = append(messages, claude.NewAssistantMessage(claude.NewTextBlock(firstAnswer)))
 	messages = append(messages, claude.NewUserMessage(claude.NewTextBlock(formattedTransition)))
 
@@ -282,12 +246,21 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
-	secondAnswer, err = writeStreamWithInterval(w, stream, "second-response", 200*time.Millisecond)
-	if err != nil {
-		log.Printf("error executing updateChatStmt: %v", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+
+	for stream.Next() {
+		event := stream.Current()
+		switch delta := event.Delta.(type) {
+		case claude.ContentBlockDeltaEventDelta:
+			if delta.Text != "" {
+				secondAnswer += delta.Text
+				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "second-response", convertToParagraphs(secondAnswer))
+				flusher.Flush()
+			}
+		}
 	}
+
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", "second-response", convertToParagraphs(secondAnswer))
+	flusher.Flush()
 
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
