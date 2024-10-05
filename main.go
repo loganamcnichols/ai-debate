@@ -300,6 +300,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processed second answer %s:", secondAnswer)
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
+		log.Println("update complete")
 		if err != nil {
 			log.Printf("error executing updateChatStmt: %v", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -307,6 +308,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		_, err := updateChatStmt.Exec(secondAnswer, firstAnswer, questionID)
+		log.Println("update complete")
 		if err != nil {
 			log.Printf("error executing updateChatStmt: %v", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
