@@ -298,12 +298,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Processed second answer %s:", secondAnswer)
-
-	fmt.Fprint(w, "event: success\ndata: success\n\n")
-	flusher.Flush()
-	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
-	flusher.Flush()
-
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, questionID)
 		if err != nil {
@@ -319,6 +313,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
+	flusher.Flush()
 }
 
 func createResponse() (uuid.UUID, error) {
@@ -427,7 +424,19 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Open a file for writing logs
 	var err error
+	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		log.Fatal("Failed to open log file:", err)
+	}
+	defer logFile.Close()
+
+	// Create a multi writer for both file and console output
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+
+	// Set the log output to use the multi writer
+	log.SetOutput(multiWriter)
 	funcMap := template.FuncMap{
 		"mod": func(i, j int) int {
 			return i % j
