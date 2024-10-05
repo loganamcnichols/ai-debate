@@ -121,7 +121,6 @@ func convertToParagraphs(text string) string {
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
-	log.Println("stream called")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -221,6 +220,10 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(firstSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
+	if stream.Err() != nil {
+		log.Printf("Error while creating response stream from anthropic: %v", stream.Err())
+		return
+	}
 
 	for stream.Next() {
 		event := stream.Current()
@@ -246,6 +249,11 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		System:    claude.F([]claude.TextBlockParam{claude.NewTextBlock(string(secondSystemPrompt))}),
 		Messages:  claude.F(messages),
 	})
+
+	if stream.Err() != nil {
+		log.Printf("error creating stream from Anthropic: %v\n", err)
+		return
+	}
 
 	for stream.Next() {
 		event := stream.Current()
@@ -390,9 +398,14 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Open a file for writing logs
-	var err error
-	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Get current timestamp
+	timestamp := time.Now().Format("2006-01-02_15-04-05")
+
+	// Create log filename with timestamp
+	logFileName := fmt.Sprintf("app_%s.log", timestamp)
+
+	// Open (or create) the log file
+	logFile, err := os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		log.Fatal("Failed to open log file:", err)
 	}
