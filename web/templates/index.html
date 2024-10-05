@@ -13,7 +13,7 @@
 <body>
   <main  _="on load get last in me
               then it.scrollIntoView({ behavior: 'smooth', block: 'end' })
-            on opening call sendMesasgeToParent('user-input', 'Opening argument')"
+            on opening call sendMessageToParent('user-input', 'Opening argument')"
           hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-vals='{ "user-msg": "Opening argument" }'
           hx-swap="beforeend"
@@ -70,7 +70,7 @@
                 if its value equals '' 
                   halt the event 
                 else 
-                  call sendMesasgeToParent('user-input', #user-input.value) then
+                  call sendMessageToParent('user-input', #user-input.value) then
                   add @disabled to <#prompt-button,#input-button,#user-input/>
                 end
               on htmx:afterRequest
