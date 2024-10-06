@@ -10,7 +10,7 @@
   <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body>
+<body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')">
   <main  _="on load me.scrollTo({ top: me.scrollHeight, left: 0, behavior: 'smooth' })
             on opening call sendMessageToParent('user-input', 'Opening argument')"
           hx-post="/submit-question?response-id={{ .ResponseID }}"
@@ -20,7 +20,6 @@
           hx-on::sse-message="this.scrollTo({ top: this.scrollHeight, left: 0, behavior: 'auto' })"
           hx-on::after-swap="if (this === event.target) 
                               this.scrollTo({ top: this.scrollheight, left: 0, behavior: 'smooth' })">
-
   {{ if eq (len .QuestionRows) 0 }}
     <div class="intro-msgs">
       <p class="intro-msg" _="on load wait 1s
@@ -54,8 +53,7 @@
           hx-swap="beforeend" hx-target="main"
           hx-trigger="submit"
            _="on htmx:beforeRequest 
-                add @disabled to <#prompt-button,#input-button,#user-input/> then
-                call sendMessageToParent('user-input', #hidden-msg.value)"> 
+                add @disabled to <#prompt-button,#input-button,#user-input/>"> 
       <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
               hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
               {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}
@@ -69,9 +67,6 @@
            _="on htmx:beforeRequest get #user-input then 
                 if its value equals '' 
                   halt the event 
-                else 
-                  call sendMessageToParent('user-input', #user-input.value) then
-                  add @disabled to <#prompt-button,#input-button,#user-input/>
                 end
               on htmx:afterRequest
                 set #user-input's value to ''">
@@ -111,7 +106,7 @@
       try {
         window.parent.postMessage({ type, content }, origin);
       } catch (e) {
-        console.error('Error sending message to', origin, ':', e);
+        void(0);
       }
     });
 
