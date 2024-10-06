@@ -16,7 +16,11 @@
           hx-post="/submit-question?response-id={{ .ResponseID }}"
           hx-vals='{ "user-msg": "Opening argument" }'
           hx-swap="beforeend"
-          hx-trigger="opening">
+          hx-trigger="opening"
+          hx-on::sse-message="this.scrollTo({ top: this.scrollHeight, left: 0, behavior: 'auto' })"
+          hx-on::after-swap="if (this === event.target) 
+                              this.scrollTo({ top: this.scrollheight, left: 0, behavior: 'smooth' })">
+
   {{ if eq (len .QuestionRows) 0 }}
     <div class="intro-msgs">
       <p class="intro-msg" _="on load wait 1s
@@ -51,10 +55,7 @@
           hx-trigger="submit"
            _="on htmx:beforeRequest 
                 add @disabled to <#prompt-button,#input-button,#user-input/> then
-                call sendMessageToParent('user-input', #hidden-msg.value)
-              on htmx:afterSwap from me 
-                get the last .chat-row in event.detail.target then
-                it.scrollIntoView({ block: 'end', behavior: 'smooth' })"> 
+                call sendMessageToParent('user-input', #hidden-msg.value)"> 
       <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
               hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
               {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}
@@ -73,10 +74,7 @@
                   add @disabled to <#prompt-button,#input-button,#user-input/>
                 end
               on htmx:afterRequest
-                set #user-input's value to ''
-              on htmx:afterSwap
-                get the last .chat-row in event.detail.target then
-                it.scrollIntoView({ block: 'end', behavior: 'smooth' })">
+                set #user-input's value to ''">
       <div class="textbar">
         <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
