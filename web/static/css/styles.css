@@ -33,6 +33,9 @@ main
   flex-direction: column;
   overflow-y: auto;  
   -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
 
 
