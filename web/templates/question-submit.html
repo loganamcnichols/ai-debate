@@ -1,7 +1,7 @@
 <div hx-ext="sse" sse-connect="/chat-response?response-id={{ .ResponseID }}" sse-close="close" class="chat-row"
      _="on htmx:sseBeforeMessage call responseEvent(event)
         def scrollToBottom(ts) me.scrollIntoView({ block: 'end', behavior: 'auto' }) end
-        on every htmx:sseMessage requestAnimationFrame(scrollToBottom)
+        on every htmx:sseMessage call requestAnimationFrame(scrollToBottom) 
         on htmx:sseClose remove @disabled from <#user-input,#prompt-button,#input-button/>
         then responseEvent(event)
         then wait 100ms me.scrollIntoView({ block: 'end', behavior: 'auto' })" hx-swap="innerHTML">
