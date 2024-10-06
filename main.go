@@ -147,23 +147,28 @@ func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionSt
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+
+	throttle := time.NewTicker(20 * time.Millisecond)
+	defer throttle.Stop()
+
 	for {
-		var res openai.ChatCompletionStreamResponse
-		res, err = stream.Recv()
-		if errors.Is(err, io.EOF) {
-			err = nil
+		select {
+		case <-throttle.C:
+			var res openai.ChatCompletionStreamResponse
+			res, err = stream.Recv()
+			if errors.Is(err, io.EOF) {
+				err = nil
+				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
+				flusher.Flush()
+				return
+			}
+			if err != nil {
+				return
+			}
+			text += res.Choices[0].Delta.Content
 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
 			flusher.Flush()
-			return
 		}
-
-		if err != nil {
-			return
-		}
-
-		text += res.Choices[0].Delta.Content
-		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
-		flusher.Flush()
 	}
 }
 
