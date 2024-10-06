@@ -99,6 +99,7 @@
 
   // Function to send message to parent
   function sendMessageToParent(type, content) {
+    console.log("sending message:", type);
     if (!isInIframe()) {
       return;
     }
@@ -113,24 +114,6 @@
     function openingArguments() {
 
     } 
-  }
-
-  // Modified response event handler
-  function responseEvent(event) {
-    const msg = event.detail;
-    if (msg.type == "innovation-first") {
-      if (msg.data == "true") innovationFirst = true; 
-      else if (msg.data == "false") innovationFirst = false;
-      else throw("unknown messaged data");
-      event.preventDefault();
-    }
-    if (msg.type === "first-response") {
-      if (innovationFirst) sendMessageToParent('innovation-response', msg.data);
-      else                 sendMessageToParent('caution-response', msg.data);
-    } else if (msg.type === "second-response") {
-      if (innovationFirst) sendMessageToParent('caution-response', msg.data);
-      else                 sendMessageToParent('innovation-response', msg.data);
-    }
   }
 </script>
 </body>

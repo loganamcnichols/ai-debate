@@ -1,7 +1,7 @@
 <div hx-ext="sse" sse-connect="/chat-response?response-id={{ .ResponseID }}" sse-close="close" class="chat-row"
      _="on htmx:sseBeforeMessage call responseEvent(event)
-        on htmx:sseClose remove @disabled from <#user-input,#prompt-button,#input-button/>
-        then responseEvent(event)" hx-swap="innerHTML">
+        on htmx:sseClose remove @disabled from <#user-input,#prompt-button,#input-button/>" 
+        hx-swap="innerHTML">
   <div class="msg">{{ .UserMsg }}</div>
   <div class="msg" sse-swap="first-response"></div>
   <div class="msg" sse-swap="second-response"></div>
