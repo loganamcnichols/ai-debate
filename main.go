@@ -275,8 +275,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error iterating on rows: %v", rows.Err())
 	}
 
-	log.Printf("user message %s\n", messages[len(messages)-1].Content)
-
 	var firstPromptFile string
 	var secondPromptFile string
 
@@ -338,8 +336,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("first answer%s\n", firstAnswer)
-
 	messages = append(messages, openai.ChatCompletionMessage{
 		Role:    "assistant",
 		Name:    firstBotName,
@@ -375,8 +371,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		log.Printf("error streaming openai response: %v\n", err)
 		return
 	}
-
-	log.Printf("second answer%s\n", secondAnswer)
 
 	if innovateFirst {
 		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, nextRow.QuestionID)
