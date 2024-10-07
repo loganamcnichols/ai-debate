@@ -1,0 +1,20 @@
+  <p class="error">chatbot error, please try sending message again</p>
+  <form id="suggestion-form" hx-post="/submit-suggestion?response-id={{ .ResponseID }}" hx-trigger="submit"> 
+    <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
+            hx-get="prompt-suggestion?response-id={{ .ResponseID }}" hx-target="this" hx-swap="innerHTML"></button>
+  </form>
+  <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
+        hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
+          _="on htmx:beforeRequest get #user-input then 
+              if its value equals '' 
+                halt the event 
+              end">
+    <div class="textbar">
+      <textarea name="user-msg" id="user-input" rows="1" value="{{ .UserInput }}"
+      _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
+          on input set my *height to my scrollHeight px">{{ .UserInput }}</textarea>
+      <button id="input-button" type="submit">
+        <img src="static/images/send.svg">
+      </button>
+    </div>
+  </form>

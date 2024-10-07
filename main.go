@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -11,7 +12,9 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,12 +26,18 @@ import (
 )
 
 type QuestionRow struct {
-	QuestionID    int       `db:"id"`
+	QuestionID    uuid.UUID `db:"id"`
 	ResponseID    uuid.UUID `db:"response_id"`
 	UserMsg       string    `db:"user_msg"`
 	CautionMsg    string    `db:"caution_msg"`
 	InnovationMsg string    `db:"innovation_msg"`
 	CreateTime    time.Time `db:"create_time"`
+}
+
+type ChatMessage struct {
+	QuestionID uuid.UUID
+	Role       string
+	Content    string
 }
 
 func (q *QuestionRow) Scan(rows *sql.Rows) error {
@@ -53,29 +62,118 @@ type SortedResponses struct {
 var client *openai.Client
 var tmpls *template.Template
 var db *sql.DB
+var chatMap = sync.Map{}
+var suggestionMap = sync.Map{}
+
+var prompts = []string{
+	"If AI keeps improving at its current speed what will happen?",
+	"Do you think the current level of AI safety is enough?",
+	"What has been the impact of laws about AI?",
+	"What would happen if we slowed down AI?",
+}
 
 var (
 	submitStmt          *sql.Stmt
 	innovationFirstStmt *sql.Stmt
 	chatHistoryStmt     *sql.Stmt
-	updateChatStmt      *sql.Stmt
+	insertChatStmt      *sql.Stmt
 	responseInsertStmt  *sql.Stmt
+	chatCountStmt       *sql.Stmt
 	// Add more as needed
 )
 
 func promptSuggest(w http.ResponseWriter, r *http.Request) {
-	prompts := []string{
-		"If AI keeps improving at its current speed what will happen?",
-		"Do you think the current level of AI safety is enough?",
-		"What has been the impact of laws about AI?",
-		"What would happen if we slowed down AI?",
+	params := r.URL.Query()
+	idParam := params.Get("response-id")
+	responseID, err := uuid.Parse(idParam)
+	if err != nil {
+		log.Printf("unable to parse uuid: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
-	choice := prompts[rand.Intn(len(prompts))]
-	err := tmpls.ExecuteTemplate(w, "question-suggestion.html", choice)
+
+	var availablePrompts []string
+	if data, ok := suggestionMap.Load(responseID); ok {
+		availablePrompts = data.([]string)
+	} else {
+		availablePrompts = promptCopy()
+		suggestionMap.Store(responseID, promptCopy())
+	}
+	if len(availablePrompts) == 0 {
+		w.Header().Set("HX-Reswap", "outerHTML")
+		fmt.Fprint(w, "<p>Try asking a question of your own.</p>")
+		return
+	}
+	choiceIdx := rand.Intn(len(availablePrompts))
+	choice := availablePrompts[choiceIdx]
+	err = tmpls.ExecuteTemplate(w, "question-suggestion.html", struct {
+		ChoiceIdx int
+		Choice    string
+	}{
+		ChoiceIdx: choiceIdx,
+		Choice:    choice,
+	})
 	if err != nil {
 		log.Printf("failed to execute template 'question-suggestion': %v\n", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
+	params := r.URL.Query()
+	idParam := params.Get("response-id")
+	responseID, err := uuid.Parse(idParam)
+	if err != nil {
+		log.Printf("unable to parse uuid: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	suggestionIdx, err := strconv.Atoi(r.FormValue("suggestion-idx"))
+	if err != nil {
+		log.Printf("unable to parse uuid: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var availablePrompts []string
+	if data, ok := suggestionMap.Load(responseID); ok {
+		availablePrompts = data.([]string)
+	} else {
+		availablePrompts = promptCopy()
+		suggestionMap.Store(responseID, availablePrompts)
+	}
+
+	if suggestionIdx >= len(availablePrompts) {
+		log.Printf("unable to parse uuid: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpls.ExecuteTemplate(w, "inactive-form", responseID)
+	if err != nil {
+		log.Printf("error executing template 'inactive-form': %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	userMsg := availablePrompts[suggestionIdx]
+
+	availablePrompts = append(availablePrompts[:suggestionIdx], availablePrompts[suggestionIdx+1:]...)
+	suggestionMap.Store(responseID, availablePrompts)
+
+	var userChannel chan string
+	if data, ok := chatMap.Load(responseID); ok {
+		chanP := data.(*chan string)
+		userChannel = *chanP
+	} else {
+		log.Printf("recreating channel")
+		userChannel = make(chan string, 1)
+		chatMap.Store(responseID, &userChannel)
+	}
+
+	userChannel <- userMsg
+
 }
 
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
@@ -90,32 +188,26 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 
 	userMsg := r.FormValue("user-msg")
 	if userMsg == "" {
-		log.Printf("received empty user msg")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		w.Header().Set("HX-Reswap", "none")
 		return
 	}
 
-	_, err = submitStmt.Exec(responseID, userMsg)
+	err = tmpls.ExecuteTemplate(w, "inactive-form", responseID)
 	if err != nil {
-		log.Printf("error executing submitStmt, %v\n", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("unable to execute template 'inactive-form': %v\n", err)
 		return
 	}
 
-	var firstResponse string
-	var secondResponse string
+	var userChannel chan string
+	if data, ok := chatMap.Load(responseID); ok {
+		chanP := data.(*chan string)
+		userChannel = *chanP
+	} else {
+		userChannel = make(chan string, 1)
+		chatMap.Store(responseID, &userChannel)
+	}
 
-	tmpls.ExecuteTemplate(w, "question-submit.html", struct {
-		FirstResponse  string
-		SecondResponse string
-		UserMsg        string
-		ResponseID     string
-	}{
-		FirstResponse:  firstResponse,
-		SecondResponse: secondResponse,
-		UserMsg:        userMsg,
-		ResponseID:     responseID.String(),
-	})
+	userChannel <- userMsg
 }
 
 func convertToParagraphs(text string) string {
@@ -141,41 +233,232 @@ func formatSecondMessage(secondBot string) string {
 	return fmt.Sprintf("Now, %s will respond.", secondBot)
 }
 
-func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionStream, eventName string) (text string, err error) {
+func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionStream, msg ChatMessage) (text string, err error) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
+	msgTmpl := "event: %s-%s\ndata: %s\n\n"
+
 	throttle := time.NewTicker(20 * time.Millisecond)
 	defer throttle.Stop()
 
-	for {
-		select {
-		case <-throttle.C:
-			var res openai.ChatCompletionStreamResponse
-			res, err = stream.Recv()
-			if errors.Is(err, io.EOF) {
-				err = nil
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
-				flusher.Flush()
-				return
-			}
-			if err != nil {
-				return
-			}
-			text += res.Choices[0].Delta.Content
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, convertToParagraphs(text))
+	for range throttle.C {
+		var res openai.ChatCompletionStreamResponse
+		res, err = stream.Recv()
+		if errors.Is(err, io.EOF) {
+			err = nil
+			fmt.Fprintf(w, msgTmpl, msg.QuestionID.String(), msg.Role, convertToParagraphs(text))
 			flusher.Flush()
+			return
 		}
+		if err != nil {
+			return
+		}
+		if rand.Float64() > 0.90 {
+			return "", fmt.Errorf("test error")
+		}
+		text += res.Choices[0].Delta.Content
+		fmt.Fprintf(w, msgTmpl, msg.QuestionID.String(), msg.Role, convertToParagraphs(text))
+		flusher.Flush()
 	}
+	return "", nil
+}
+
+func postTemplate(w http.ResponseWriter, eventName string, tmplName string, data interface{}) error {
+	var buf bytes.Buffer
+
+	// Execute the template and write the result to the buffer
+	err := tmpls.ExecuteTemplate(&buf, tmplName, data)
+	if err != nil {
+		return err
+	}
+
+	// Convert buffer to string and replace newlines with spaces
+	output := strings.ReplaceAll(buf.String(), "\n", " ")
+
+	// Trim any leading or trailing spaces that might have been introduced
+	output = strings.TrimSpace(output)
+
+	// Write the SSE event
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, output)
+
+	// Flush the writer to ensure the event is sent immediately
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	return nil
+}
+
+func streamIntroMsgs(w http.ResponseWriter) error {
+	err := postTemplate(w, "into-msg", "intro-msg-1", nil)
+	if err != nil {
+		return fmt.Errorf("unable to parse template 'intro-msg-1': %v", err)
+	}
+	time.Sleep(1 * time.Second)
+	err = postTemplate(w, "intro-msg", "intro-msg-2", nil)
+	if err != nil {
+		return fmt.Errorf("unable to parse template 'intro-msg-2': %v", err)
+	}
+	time.Sleep(1 * time.Second)
+	err = postTemplate(w, "intro-msg", "intro-msg-3", nil)
+	if err != nil {
+		return fmt.Errorf("unable to parse template 'intro-msg-3': %v", err)
+	}
+	return nil
+}
+
+func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMessage, error) {
+	messages := []ChatMessage{}
+	rows, err := chatHistoryStmt.Query(responseID)
+	if err != nil {
+		return messages, fmt.Errorf("failed to execute chatHistoryStmt: %v", err)
+	}
+	defer rows.Close()
+	var nextRow QuestionRow
+	for rows.Next() {
+		if err := nextRow.Scan(rows); err != nil {
+			return messages, err
+		}
+		if innovateFirst {
+			messages = append(messages, []ChatMessage{
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "user",
+					Content:    nextRow.UserMsg,
+				},
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "InnovateBot",
+					Content:    nextRow.InnovationMsg,
+				},
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "CautionBot",
+					Content:    nextRow.CautionMsg,
+				},
+			}...)
+		} else {
+			messages = append(messages, []ChatMessage{
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "user",
+					Content:    nextRow.UserMsg,
+				},
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "CautionBot",
+					Content:    nextRow.CautionMsg,
+				},
+				{
+					QuestionID: nextRow.QuestionID,
+					Role:       "InnovateBot",
+					Content:    nextRow.InnovationMsg,
+				},
+			}...)
+		}
+		innovateFirst = !innovateFirst
+	}
+	return messages, nil
+}
+
+func formatMessages(responseID uuid.UUID) ([]openai.ChatCompletionMessage, bool, error) {
+	messages := []openai.ChatCompletionMessage{{}}
+	var innovateFirst bool
+	err := innovationFirstStmt.QueryRow(responseID).Scan(&innovateFirst)
+	if err != nil {
+		return messages, false, fmt.Errorf("failed to execute innovationFirstStmt: %v", err)
+	}
+
+	rows, err := chatHistoryStmt.Query(responseID)
+	if err != nil {
+		return messages, false, fmt.Errorf("failed to execute chatHistoryStmt: %v", err)
+	}
+	defer rows.Close()
+	var nextRow QuestionRow
+	for rows.Next() {
+		if err := nextRow.Scan(rows); err != nil {
+			return messages, false, err
+		}
+		if innovateFirst {
+			messages = append(messages, []openai.ChatCompletionMessage{
+				{
+					Role:    "user",
+					Content: formatFirstMessage(nextRow.UserMsg, "Innovate Bot"),
+				},
+				{
+					Role:    "assistant",
+					Name:    "InnovateBot",
+					Content: formatFirstMessage(nextRow.InnovationMsg, "Innovate Bot"),
+				},
+				{
+					Role:    "user",
+					Content: formatSecondMessage("Caution Bot"),
+				},
+				{
+					Role:    "assistant",
+					Name:    "CautionBot",
+					Content: nextRow.CautionMsg,
+				}}...)
+		} else {
+			messages = append(messages, []openai.ChatCompletionMessage{
+				{
+					Role:    "user",
+					Content: formatFirstMessage(nextRow.UserMsg, "Caution Bot"),
+				},
+				{
+					Role:    "assistant",
+					Name:    "CautionBot",
+					Content: nextRow.CautionMsg,
+				},
+				{
+					Role:    "user",
+					Content: formatSecondMessage("Innovate Bot"),
+				},
+				{
+					Role:    "assistant",
+					Name:    "InnovateBot",
+					Content: nextRow.InnovationMsg,
+				}}...)
+		}
+		innovateFirst = !innovateFirst
+	}
+	if rows.Err() != nil {
+		return messages, false, err
+	}
+
+	return messages, innovateFirst, nil
+}
+
+func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID uuid.UUID, userInput string) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "user")
+	flusher.Flush()
+	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "InnovateBot")
+	flusher.Flush()
+	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "CautionBot")
+	flusher.Flush()
+	postTemplate(w, "active-form", "form-error.html", struct {
+		ResponseID string
+		UserInput  string
+	}{
+		ResponseID: responseID.String(),
+		UserInput:  userInput,
+	})
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
+	log.Println("stream called")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+
 	// Ensure the writer supports flushing
 	idParam := r.URL.Query().Get("response-id")
 	flusher, ok := w.(http.Flusher)
@@ -191,207 +474,224 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var innovateFirst bool
-	err = innovationFirstStmt.QueryRow(responseID).Scan(&innovateFirst)
+	var userChannel chan string
+	if data, ok := chatMap.Load(responseID); ok {
+		log.Printf("found old channel")
+		chanP := data.(*chan string)
+		userChannel = *chanP
+	} else {
+		log.Printf("creating new channel")
+		userChannel = make(chan string, 1)
+		chatMap.Store(responseID, &userChannel)
+	}
+
+	timer := time.NewTimer(1 * time.Minute)
+
+	// Close the channel after time
+	ctx := r.Context()
+	go func() {
+		select {
+		case <-timer.C:
+			fmt.Fprint(w, "event: inactive\ndata: \n\n")
+			chatMap.Delete(responseID)
+			close(userChannel)
+		case <-ctx.Done():
+			chatMap.Delete(responseID)
+			close(userChannel)
+		}
+	}()
+
+	var chatHistoryLen int
+	err = chatCountStmt.QueryRow(responseID).Scan(&chatHistoryLen)
 	if err != nil {
-		log.Printf("failed to execute innovationFirstStmt: %v\n", err)
+		log.Printf("failed to execute query for count")
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	rows, err := chatHistoryStmt.Query(responseID)
-	if err != nil {
-		log.Printf("unable to execute query chatHistoryStmt: %v\n", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		log.Println(fmt.Errorf("no rows found during scan, this shouldn't be possible"))
-		return
-	}
-
-	messages := []openai.ChatCompletionMessage{{}}
-	var nextRow QuestionRow
-	var firstAnswer, secondAnswer string
-	for {
-		if err := nextRow.Scan(rows); err != nil {
-			log.Printf("error in during scan: %v", err)
-			return
-		}
-
-		if innovateFirst {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "user",
-				Content: formatFirstMessage(nextRow.UserMsg, "Innovate Bot"),
-			})
-		} else {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "user",
-				Content: formatFirstMessage(nextRow.UserMsg, "Caution Bot"),
-			})
-		}
-
-		if !rows.Next() {
-			break
-		}
-
-		if innovateFirst {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "assistant",
-				Name:    "InnovateBot",
-				Content: formatFirstMessage(nextRow.InnovationMsg, "Innovate Bot"),
-			})
-
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "user",
-				Content: formatSecondMessage("Caution Bot"),
-			})
-
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "assistant",
-				Name:    "CautionBot",
-				Content: nextRow.CautionMsg,
-			})
-		} else {
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "assistant",
-				Name:    "CautionBot",
-				Content: nextRow.CautionMsg,
-			})
-
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "user",
-				Content: formatSecondMessage("Innovate Bot"),
-			})
-
-			messages = append(messages, openai.ChatCompletionMessage{
-				Role:    "assistant",
-				Name:    "InnovateBot",
-				Content: nextRow.InnovationMsg,
-			})
-		}
-
-		innovateFirst = !innovateFirst
-	}
-
-	if rows.Err() != nil {
-		log.Printf("error iterating on rows: %v", rows.Err())
-	}
-
-	var firstPromptFile string
-	var secondPromptFile string
-
-	var firstBotName string
-	var secondBotName string
-
-	if innovateFirst {
-		firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
-		secondPromptFile = "PRO_CAUTION_PROMPT.txt"
-
-		firstBotName = "InnovateBot"
-		secondBotName = "CautionBot"
-
-		fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
-
-		flusher.Flush()
-
-	} else {
-		firstPromptFile = "PRO_CAUTION_PROMPT.txt"
-		secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
-
-		firstBotName = "CautionBot"
-		secondBotName = "InnovateBot"
-
-		fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
-		flusher.Flush()
-	}
-
-	firstSystemPrompt, err := os.ReadFile(firstPromptFile)
-	if err != nil {
-		log.Printf("unable to read innovation prompt: %v", err)
-	}
-	secondSystemPrompt, err := os.ReadFile(secondPromptFile)
-	if err != nil {
-		log.Printf("unable to read caution prompt: %v", err)
-	}
-
-	messages[0] = openai.ChatCompletionMessage{
-		Role:    "system",
-		Content: string(firstSystemPrompt),
-	}
-
-	req := openai.ChatCompletionRequest{
-		Model:    openai.GPT4oMini20240718,
-		Messages: messages,
-		Stream:   true,
-	}
-	stream1, err := client.CreateChatCompletionStream(context.Background(), req)
-	if err != nil {
-		log.Printf("ChatCompletionStream error: %v\n", err)
-		return
-	}
-
-	defer stream1.Close()
-
-	firstAnswer, err = streamOpenaiResponse(w, stream1, "first-response")
-	if err != nil {
-		log.Printf("error streaming openai response: %v\n", err)
-		return
-	}
-
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    "assistant",
-		Name:    firstBotName,
-		Content: firstAnswer,
-	})
-
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    "user",
-		Content: formatSecondMessage(secondBotName),
-	})
-
-	messages[0] = openai.ChatCompletionMessage{
-		Role:    "system",
-		Content: string(secondSystemPrompt),
-	}
-
-	req = openai.ChatCompletionRequest{
-		Model:    openai.GPT4oMini20240718,
-		Messages: messages,
-		Stream:   true,
-	}
-
-	stream2, err := client.CreateChatCompletionStream(context.Background(), req)
-	if err != nil {
-		log.Printf("ChatCompletionStream error: %v\n", err)
-		return
-	}
-
-	defer stream2.Close()
-
-	secondAnswer, err = streamOpenaiResponse(w, stream2, "second-response")
-	if err != nil {
-		log.Printf("error streaming openai response: %v\n", err)
-		return
-	}
-
-	if innovateFirst {
-		_, err := updateChatStmt.Exec(firstAnswer, secondAnswer, nextRow.QuestionID)
-		log.Println("update complete")
-		if err != nil {
-			log.Printf("error executing updateChatStmt: %v", err)
+	if chatHistoryLen == 0 {
+		if err = streamIntroMsgs(w); err != nil {
+			log.Printf("failed to load intro msgs: %v\n", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-	} else {
-		_, err := updateChatStmt.Exec(secondAnswer, firstAnswer, nextRow.QuestionID)
-		log.Println("update complete")
+
+		userChannel <- "opening argument"
+	}
+
+	for userMsg := range userChannel {
+		log.Println("user message", userMsg)
+		timer.Reset(20 * time.Minute)
+		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
-			log.Printf("error executing updateChatStmt: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+
+		var firstPromptFile string
+		var secondPromptFile string
+
+		var firstBotName string
+		var secondBotName string
+
+		if innovateNext {
+			firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
+			secondPromptFile = "PRO_CAUTION_PROMPT.txt"
+
+			firstBotName = "InnovateBot"
+			secondBotName = "CautionBot"
+
+			fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
+
+			flusher.Flush()
+
+		} else {
+			firstPromptFile = "PRO_CAUTION_PROMPT.txt"
+			secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
+
+			firstBotName = "CautionBot"
+			secondBotName = "InnovateBot"
+
+			fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
+			flusher.Flush()
+		}
+
+		firstSystemPrompt, err := os.ReadFile(firstPromptFile)
+		if err != nil {
+			log.Printf("unable to read innovation prompt: %v", err)
+		}
+		secondSystemPrompt, err := os.ReadFile(secondPromptFile)
+		if err != nil {
+			log.Printf("unable to read caution prompt: %v", err)
+		}
+
+		questionID := uuid.New()
+
+		userChatMessage := ChatMessage{
+			QuestionID: questionID,
+			Role:       "user",
+			Content:    userMsg,
+		}
+
+		firstRespMessage := ChatMessage{
+			QuestionID: questionID,
+			Role:       firstBotName,
+		}
+
+		secondRespMessage := ChatMessage{
+			QuestionID: questionID,
+			Role:       secondBotName,
+		}
+
+		log.Printf("posting chat messages")
+
+		err = postTemplate(w, "chat-msg", "chat-msg", userChatMessage)
+		if err != nil {
+			log.Printf("failed to post chat-message template: %v", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
+		}
+
+		err = postTemplate(w, "chat-msg", "chat-msg", firstRespMessage)
+		if err != nil {
+			log.Printf("failed to post chat-message template: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		err = postTemplate(w, "chat-msg", "chat-msg", secondRespMessage)
+		if err != nil {
+			log.Printf("failed to post chat-message template: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    "user",
+			Content: formatFirstMessage(userMsg, firstBotName),
+		})
+
+		messages[0] = openai.ChatCompletionMessage{
+			Role:    "system",
+			Content: string(firstSystemPrompt),
+		}
+
+		req := openai.ChatCompletionRequest{
+			Model:    openai.GPT4oMini20240718,
+			Messages: messages,
+			Stream:   true,
+		}
+
+		stream1, err := client.CreateChatCompletionStream(context.Background(), req)
+		if err != nil {
+			return
+		}
+		defer stream1.Close()
+
+		firstAnswer, err := streamOpenaiResponse(w, stream1, firstRespMessage)
+		if err != nil {
+			processStreamError(w, responseID, questionID, userMsg)
+			continue
+		}
+
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    "assistant",
+			Name:    firstBotName,
+			Content: firstAnswer,
+		})
+
+		messages = append(messages, openai.ChatCompletionMessage{
+			Role:    "user",
+			Content: formatSecondMessage(secondBotName),
+		})
+
+		messages[0] = openai.ChatCompletionMessage{
+			Role:    "system",
+			Content: string(secondSystemPrompt),
+		}
+
+		req = openai.ChatCompletionRequest{
+			Model:    openai.GPT4oMini20240718,
+			Messages: messages,
+			Stream:   true,
+		}
+
+		stream2, err := client.CreateChatCompletionStream(context.Background(), req)
+		if err != nil {
+			log.Printf("ChatCompletionStream error: %v\n", err)
+			processStreamError(w, responseID, questionID, userMsg)
+			continue
+		}
+
+		defer stream2.Close()
+
+		secondAnswer, err := streamOpenaiResponse(w, stream2, secondRespMessage)
+		if err != nil {
+			log.Printf("error streaming openai response: %v\n", err)
+			processStreamError(w, responseID, questionID, userMsg)
+		}
+
+		err = postTemplate(w, "active-form", "active-form", responseID.String())
+		if err != nil {
+			log.Printf("unable to execute template 'active-form': %v\n", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		if innovateNext {
+			_, err := insertChatStmt.Exec(questionID, responseID, userMsg, secondAnswer, firstAnswer)
+			if err != nil {
+				log.Printf("error executing insertChatStmt: %v", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			_, err := insertChatStmt.Exec(questionID, responseID, userMsg, firstAnswer, secondAnswer)
+			log.Println("update complete")
+			if err != nil {
+				log.Printf("error executing updateChatStmt: %v", err)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -410,6 +710,12 @@ func createResponse() (uuid.UUID, error) {
 	return responseID, nil
 }
 
+func promptCopy() []string {
+	dst := make([]string, len(prompts))
+	copy(dst, prompts)
+	return dst
+}
+
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	var responseID uuid.UUID
 	cookie, err := r.Cookie("response-id")
@@ -418,12 +724,15 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Print(err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
 		}
+
 		http.SetCookie(w, &http.Cookie{
 			Name:  "response-id",
 			Value: responseID.String(),
 			Path:  "/",
 		})
+
 	} else {
 		responseID, err = uuid.Parse(cookie.Value)
 		if err != nil {
@@ -456,47 +765,19 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := chatHistoryStmt.Query(responseID)
+	messages, err := formatTemplateMessages(responseID, innovationFirst)
 	if err != nil {
-		log.Printf("error executing query chatHistoryStmt: %v\n", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		log.Printf("unable to format template messages: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
-	}
-	defer res.Close()
-	var questionsOut []SortedResponses
-	initInnvationFirst := innovationFirst
-	for res.Next() {
-		var nextRow QuestionRow
-		if err := nextRow.Scan(res); err != nil {
-			log.Printf("error scanning row: %v\n", err)
-			return
-		}
-		if innovationFirst {
-			questionsOut = append(questionsOut, SortedResponses{
-				UserMsg:         nextRow.UserMsg,
-				FirstResponse:   nextRow.InnovationMsg,
-				SecondResponse:  nextRow.CautionMsg,
-				InnovationFirst: innovationFirst,
-			})
-		} else {
-			questionsOut = append(questionsOut, SortedResponses{
-				UserMsg:         nextRow.UserMsg,
-				FirstResponse:   nextRow.CautionMsg,
-				SecondResponse:  nextRow.InnovationMsg,
-				InnovationFirst: innovationFirst,
-			})
-		}
-		innovationFirst = !innovationFirst
 	}
 
 	var data = struct {
-		QuestionRows    []SortedResponses
-		InnovationFirst bool
-		ResponseID      string
+		QuestionRows []ChatMessage
+		ResponseID   string
 	}{
-		QuestionRows:    questionsOut,
-		InnovationFirst: initInnvationFirst,
-		ResponseID:      responseID.String(),
+		QuestionRows: messages,
+		ResponseID:   responseID.String(),
 	}
 
 	err = tmpls.ExecuteTemplate(w, "index.html", data)
@@ -571,7 +852,8 @@ func main() {
 		log.Fatalf("Failed to prepare chatHistoryStmt: %v", err)
 	}
 
-	updateChatStmt, err = db.Prepare(`UPDATE chat SET innovation_msg = $1, caution_msg = $2 WHERE id = $3;`)
+	insertChatStmt, err = db.Prepare(`INSERT INTO chat (id, response_id, user_msg, caution_msg, innovation_msg)
+																							VALUES ($1, $2, $3, $4, $5);`)
 	if err != nil {
 		log.Fatalf("Failed to prepare updateChatStmt: %v", err)
 	}
@@ -581,6 +863,11 @@ func main() {
 		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
 	}
 
+	chatCountStmt, err = db.Prepare(`SELECT COUNT(*) FROM chat WHERE response_id = $1`)
+	if err != nil {
+		log.Fatalf("Failed to prepare chatCountStmt: %v", err)
+	}
+
 	client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	r := mux.NewRouter()
@@ -588,7 +875,8 @@ func main() {
 	// Define your routes
 	r.HandleFunc("/", handleIndex)
 	r.HandleFunc("/submit-question", submitQuestion)
-	r.HandleFunc("/chat-response", streamResponse)
+	r.HandleFunc("/submit-suggestion", suggestionSubmit)
+	r.HandleFunc("/chat", streamResponse)
 	r.HandleFunc("/prompt-suggestion", promptSuggest)
 
 	// Serve static files

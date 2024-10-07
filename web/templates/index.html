@@ -10,78 +10,71 @@
   <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')">
-  <main  _="on load me.scrollTo({ top: me.scrollHeight, left: 0, behavior: 'smooth' })
-            on opening call sendMessageToParent('user-input', 'Opening argument')"
-          hx-post="/submit-question?response-id={{ .ResponseID }}"
-          hx-vals='{ "user-msg": "Opening argument" }'
-          hx-swap="beforeend"
-          hx-trigger="opening"
-          hx-on::sse-message="this.scrollTo({ top: this.scrollHeight, left: 0, behavior: 'auto' })"
-          hx-on::after-swap="if (this === event.target) 
-                              this.scrollTo({ top: this.scrollheight, left: 0, behavior: 'smooth' })">
-  {{ if eq (len .QuestionRows) 0 }}
-    <div class="intro-msgs">
-      <p class="intro-msg" _="on load wait 1s
-                              add .visible to me
-                              then send show to the next <p/>">
-        You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
-      </p>
-      <p class="intro-msg" _="on show wait 2s
-                              add .visible to me 
-                              then send show to the next <p/>">
-        one will make the strongest arguments for to prioritize greater <strong>caution</strong> in AI development.
-      </p>
-      <p class="intro-msg" _="on show wait 2s
-                              add .visible to me 
-                              then wait 3s trigger opening on <main/>">
-        The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI development.
-      </p>
+<body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
+      hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}">
+  <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
+                            else if (event.detail.type === 'chat-message') 
+                                 this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
+                            else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });"
+                        _="on load me.scrollTo({ top: me.scrollHeight,   behavior: 'smooth' })">
+    <div id="intro-msgs" sse-swap="into-msg" hx-swap="beforeend">
     </div>
-  {{ else }}
-  {{ range $i, $val := .QuestionRows }}
-    <div class="chat-row">
-      <div class="msg">{{ .UserMsg }}</div>
-      <div class="msg">{{ .FirstResponse }}</div>
-      <div class="msg">{{ .SecondResponse }}</div>
+    <div id="chat-msgs"  sse-swap="chat-msg, inactive" hx-swap="beforeend">
+    {{ range $i, $val := .QuestionRows }}
+    {{ block "chat-msg" . }}
+      <div class="msg" sse-swap="{{ .QuestionID }}-{{ .Role }}-delete" hx-swap="delete">
+        <div class="msg-content" sse-swap="{{ .QuestionID }}-{{ .Role }}"
+                          hx-swap="innerHTML">{{ .Content }}</div>
+      </div>
+    {{ end }}
+    {{ end }}
     </div>
-  {{ end }}
-  {{ end }}
   </main>
-  <footer>
-    <form id="suggestion-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
-          hx-swap="beforeend" hx-target="main"
-          hx-trigger="submit"
-           _="on htmx:beforeRequest 
-                add @disabled to <#prompt-button,#input-button,#user-input/>"> 
+  <footer sse-swap="active-form" hx-swap="innerHTML" hx-target="this">
+  {{ if gt (len .QuestionRows) 0 }}
+  {{ block "active-form" .ResponseID }}
+    <form id="suggestion-form" hx-post="/submit-suggestion?response-id={{ . }}" hx-trigger="submit"> 
       <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
-              hx-get="prompt-suggestion" hx-target="this" hx-swap="innerHTML"
-              {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}
-              _="on htmx:beforeRequest halt the event's bubbling
-                 on htmx:afterRequest halt the event's bubbling
-                 on htmx:afterSwap halt the event's bubbling"></button>
+              hx-get="prompt-suggestion?response-id={{ . }}" hx-target="this" hx-swap="innerHTML"></button>
     </form>
-    <form id="submission-form" hx-post="/submit-question?response-id={{ .ResponseID }}"
+    <form id="submission-form" hx-post="/submit-question?response-id={{ . }}"
+          hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
+           _="on htmx:beforeRequest get #user-input then 
+                if its value equals '' 
+                  halt the event 
+                end">
+      <div class="textbar">
+        <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
+        _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
+           on input set my *height to my scrollHeight px"></textarea>
+        <button id="input-button" type="submit">
+          <img src="static/images/send.svg">
+        </button>
+      </div>
+    </form>
+    {{ end }}
+    {{ else }}
+    {{ block "inactive-form" .ResponseID }}
+    <form id="submission-form" hx-post="/submit-suggestion?response-id={{ . }}" 
           hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
           hx-swap="beforeend" hx-target="main"
            _="on htmx:beforeRequest get #user-input then 
                 if its value equals '' 
                   halt the event 
-                end
-              on htmx:afterRequest
-                set #user-input's value to ''">
+                end">
       <div class="textbar">
-        <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments"
+        <textarea name="user-msg" id="user-input" rows="1" value="Opening arguments" disabled
         _="on keydown[key is 'Enter' and no shiftkey] halt the event's default 
-           on input set my *height to my scrollHeight px" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}></textarea>
-        <button id="input-button" type="submit" {{ if eq (len .QuestionRows) 0 }}disabled{{ end }}>
+           on input set my *height to my scrollHeight px"></textarea>
+        <button id="input-button" type="submit" disabled>
           <img src="static/images/send.svg">
         </button>
       </div>
     </form>
+    {{ end }}
+    {{ end }}
   </footer>
 <script>
-
   let innovationFirst = true;
   const allowedOrigins = [
     'http://localhost:5173',

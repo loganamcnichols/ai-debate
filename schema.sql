@@ -11,7 +11,7 @@ CREATE TABLE response (
 
 -- Create the chat table
 CREATE TABLE chat (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY,
   response_id UUID REFERENCES response(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   user_msg TEXT NOT NULL,
   caution_msg TEXT DEFAULT '',

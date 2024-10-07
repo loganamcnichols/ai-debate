@@ -38,15 +38,28 @@ main
   backface-visibility: hidden;
 }
 
+.error
+{
+  padding: 0rem;
+  margin: 0rem;
+  font-size: 1rem;
+  grid-area: error;
+  color: #ff4d4d;
+}
 
 footer
 {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: 0.5fr, 1fr 1fr;
+  grid-auto-columns: 1fr;
+  grid-template-areas: "error"
+                       "top"
+                       "bottom";
   position: fixed;
   transform: translateZ(0);
   bottom: 0;
   align-items: center;
+  justify-items: center;
   gap: 1rem;
   left: 0;
   width: 100%;
@@ -67,7 +80,7 @@ footer
 {
   body
   {
-    padding: 10vh 25% 10vh 25%; 
+    padding: 10vh 25% 18vh 25%; 
   }
   footer 
   {
@@ -97,14 +110,20 @@ button:disabled
   cursor: default;
 }
 
+#chat-msgs { display: flex; flex-direction: column; }
+
+
 .msg { padding: 1rem; margin-top: 0.5rem; margin-bottom: 0.5rem; border-radius: 40px; max-width: 80%; }
-.chat-row                 > .msg:nth-child(1) { align-self: center;     background-color: #374962; }
-.chat-row:nth-child(odd)  > .msg:nth-child(2) { align-self: flex-start; background-color: #375962; }
-.chat-row:nth-child(odd)  > .msg:nth-child(3) { align-self: flex-end;   background-color: #373E62; }
-.chat-row:nth-child(even) > .msg:nth-child(2) { align-self: flex-end;   background-color: #373E62; }
-.chat-row:nth-child(even) > .msg:nth-child(3) { align-self: flex-start; background-color: #375962; }
+.msg:nth-child(6n + 1),
+.msg:nth-child(6n + 4) { align-self: center; background-color: #374962; }
+.msg:nth-child(6n + 2),
+.msg:nth-child(6n) { align-self: flex-start; background-color: #375962; }
+.msg:nth-child(6n + 3),
+.msg:nth-child(6n + 5) { align-self: flex-end; background-color: #373E62; }
 
+.msg-content { margin: 0rem; padding: 0rem; }
 
+#suggestion-form { grid-area: top; }
 
 #suggestion-form > button
 {
@@ -128,6 +147,7 @@ button:disabled
 #submission-form 
 {
   width: 100%;
+  grid-area: bottom;
 }
 
 
@@ -277,3 +297,12 @@ textarea {
     background-color: #e60000; /* Darker red on hover */
 }
 
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.fade-in {
+    animation: fadeIn 1s ease-out forwards;
+}
