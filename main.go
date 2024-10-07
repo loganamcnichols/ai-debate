@@ -214,13 +214,6 @@ func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = tmpls.ExecuteTemplate(w, "inactive-form", responseID)
-	if err != nil {
-		log.Printf("error executing template 'inactive-form': %v\n", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
 	userMsg := availablePrompts[suggestionIdx]
 
 	availablePrompts = append(availablePrompts[:suggestionIdx], availablePrompts[suggestionIdx+1:]...)
@@ -228,11 +221,17 @@ func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
 
 	userChannel, ok := chatMap.Load(responseID)
 	if !ok {
-		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, userChannel)
+		return
 	}
 
 	userChannel <- userMsg
+
+	err = tmpls.ExecuteTemplate(w, "inactive-form", responseID)
+	if err != nil {
+		log.Printf("error executing template 'inactive-form': %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
@@ -251,20 +250,18 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var userChannel chan string
+	userChannel, ok := chatMap.Load(responseID)
+	if !ok {
+		return
+	}
+	userChannel <- userMsg
+
 	err = tmpls.ExecuteTemplate(w, "inactive-form", responseID)
 	if err != nil {
 		log.Printf("unable to execute template 'inactive-form': %v\n", err)
 		return
 	}
-
-	var userChannel chan string
-	userChannel, ok := chatMap.Load(responseID)
-	if !ok {
-		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, userChannel)
-	}
-
-	userChannel <- userMsg
 }
 
 func convertToParagraphs(text string) string {
