@@ -58,12 +58,74 @@ type SortedResponses struct {
 	InnovationFirst bool
 }
 
+type TimeoutMap[K, V any] struct {
+	Map     sync.Map
+	Timeout time.Duration
+}
+
+func (timeoutMap *TimeoutMap[K, V]) Store(key K, value V) {
+	timeoutMap.Map.Store(key, value)
+	timer := time.NewTimer(timeoutMap.Timeout)
+	go func() {
+		for range timer.C {
+			timeoutMap.Map.Delete(key)
+		}
+	}()
+}
+
+func (timeoutMap *TimeoutMap[K, V]) Delete(key K) {
+	timeoutMap.Map.Delete(key)
+}
+
+func (timeoutMap *TimeoutMap[K, V]) Load(key K) (V, bool) {
+	var val V
+	if data, ok := timeoutMap.Map.Load(key); ok {
+		val, ok := data.(V)
+		return val, ok
+	}
+	return val, false
+}
+
+type ChannelMap[K, V any] struct {
+	Map     sync.Map
+	Timeout time.Duration
+}
+
+func (channelMap *ChannelMap[K, V]) Store(key K, value chan V) {
+	channelMap.Map.Store(key, value)
+	timer := time.NewTimer(channelMap.Timeout)
+	go func() {
+		for range timer.C {
+			channelMap.Map.Delete(key)
+		}
+	}()
+}
+
+func (channelMap *ChannelMap[K, V]) Delete(key K) {
+	if data, ok := channelMap.Load(key); ok {
+		channelMap.Map.Delete(key)
+		close(data)
+	}
+}
+
+func (channelMap *ChannelMap[K, V]) Load(key K) (chan V, bool) {
+	if data, ok := channelMap.Map.Load(key); ok {
+		if val, ok := data.(chan V); ok {
+			return val, true
+		}
+	}
+	return nil, false
+}
+
 // var client *claude.Client
 var client *openai.Client
 var tmpls *template.Template
 var db *sql.DB
-var chatMap = sync.Map{}
-var suggestionMap = sync.Map{}
+var chatMap = ChannelMap[uuid.UUID, string]{
+	Timeout: 10 * time.Minute,
+}
+
+var suggestionMap = TimeoutMap[uuid.UUID, []string]{}
 
 var prompts = []string{
 	"If AI keeps improving at its current speed what will happen?",
@@ -92,12 +154,10 @@ func promptSuggest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var availablePrompts []string
-	if data, ok := suggestionMap.Load(responseID); ok {
-		availablePrompts = data.([]string)
-	} else {
+	availablePrompts, ok := suggestionMap.Load(responseID)
+	if !ok {
 		availablePrompts = promptCopy()
-		suggestionMap.Store(responseID, promptCopy())
+		suggestionMap.Store(responseID, availablePrompts)
 	}
 	if len(availablePrompts) == 0 {
 		w.Header().Set("HX-Reswap", "outerHTML")
@@ -137,9 +197,8 @@ func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var availablePrompts []string
-	if data, ok := suggestionMap.Load(responseID); ok {
-		availablePrompts = data.([]string)
-	} else {
+	availablePrompts, ok := suggestionMap.Load(responseID)
+	if !ok {
 		availablePrompts = promptCopy()
 		suggestionMap.Store(responseID, availablePrompts)
 	}
@@ -162,18 +221,13 @@ func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
 	availablePrompts = append(availablePrompts[:suggestionIdx], availablePrompts[suggestionIdx+1:]...)
 	suggestionMap.Store(responseID, availablePrompts)
 
-	var userChannel chan string
-	if data, ok := chatMap.Load(responseID); ok {
-		chanP := data.(*chan string)
-		userChannel = *chanP
-	} else {
-		log.Printf("recreating channel")
+	userChannel, ok := chatMap.Load(responseID)
+	if !ok {
 		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, &userChannel)
+		chatMap.Store(responseID, userChannel)
 	}
 
 	userChannel <- userMsg
-
 }
 
 func submitQuestion(w http.ResponseWriter, r *http.Request) {
@@ -199,12 +253,10 @@ func submitQuestion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userChannel chan string
-	if data, ok := chatMap.Load(responseID); ok {
-		chanP := data.(*chan string)
-		userChannel = *chanP
-	} else {
+	userChannel, ok := chatMap.Load(responseID)
+	if !ok {
 		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, &userChannel)
+		chatMap.Store(responseID, userChannel)
 	}
 
 	userChannel <- userMsg
@@ -470,30 +522,17 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userChannel chan string
-	if data, ok := chatMap.Load(responseID); ok {
-		chanP := data.(*chan string)
-		userChannel = *chanP
-	} else {
+	userChannel, ok := chatMap.Load(responseID)
+	if !ok {
 		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, &userChannel)
+		chatMap.Store(responseID, userChannel)
 	}
-
-	timer := time.NewTimer(1 * time.Minute)
 
 	// Close the channel after time
 	ctx := r.Context()
 	go func() {
-		select {
-		case <-timer.C:
-			log.Printf("send inactive event")
-			fmt.Fprint(w, "event: inactive\ndata: \n\n")
-			flusher.Flush()
+		for range ctx.Done() {
 			chatMap.Delete(responseID)
-			close(userChannel)
-		case <-ctx.Done():
-			chatMap.Delete(responseID)
-			close(userChannel)
 		}
 	}()
 
@@ -516,8 +555,18 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 	}
 
+	timer := time.NewTimer(1 * time.Minute)
+
+	go func() {
+		for range timer.C {
+			fmt.Printf("got here")
+			fmt.Fprintf(w, "event: inactive\ndata: \n\n")
+			flusher.Flush()
+		}
+	}()
+
 	for userMsg := range userChannel {
-		timer.Reset(20 * time.Minute)
+		timer.Reset(10 * time.Second)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
