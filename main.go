@@ -123,9 +123,13 @@ var tmpls *template.Template
 var db *sql.DB
 var chatMap = ChannelMap[uuid.UUID, string]{
 	Timeout: 10 * time.Minute,
+	Map:     sync.Map{},
 }
 
-var suggestionMap = TimeoutMap[uuid.UUID, []string]{}
+var suggestionMap = TimeoutMap[uuid.UUID, []string]{
+	Timeout: 1 * time.Minute,
+	Map:     sync.Map{},
+}
 
 var prompts = []string{
 	"If AI keeps improving at its current speed what will happen?",
@@ -555,7 +559,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 	}
 
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(1 * time.Minute)
 
 	go func() {
 		for range timer.C {
@@ -566,7 +570,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for userMsg := range userChannel {
-		timer.Reset(10 * time.Second)
+		timer.Reset(1 * time.Minute)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
