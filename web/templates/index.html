@@ -17,7 +17,7 @@
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
                             else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });"
                         _="on load me.scrollTo({ top: me.scrollHeight,   behavior: 'smooth' })">
-    <div id="intro-msgs" sse-swap="into-msg" hx-swap="beforeend">
+    <div id="intro-msgs" sse-swap="intro-msg" hx-swap="beforeend">
     </div>
     <div id="chat-msgs"  sse-swap="chat-msg, inactive" hx-swap="beforeend">
     {{ range $i, $val := .QuestionRows }}

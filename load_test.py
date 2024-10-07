@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import random
 
-AI_DEBATE = "http://localhost:8080"
+AI_DEBATE = "https://ai-debate.org"
 QUESTIONS = [
     "If AI keeps improving at its current speed what will happen?",
     "Do you think the current level of AI safety is enough?",
@@ -15,6 +15,7 @@ QUESTIONS = [
 async def create_user(session):
     async with session.get(AI_DEBATE + "/") as response:
         html = await response.text()
+        print(html)
         soup = BeautifulSoup(html, 'html.parser')
         form = soup.find('form')
         hx_tag = form.attrs["hx-post"]

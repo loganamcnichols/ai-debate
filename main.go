@@ -344,20 +344,21 @@ func postTemplate(w http.ResponseWriter, eventName string, tmplName string, data
 }
 
 func streamIntroMsgs(w http.ResponseWriter) error {
-	err := postTemplate(w, "into-msg", "intro-msg-1", nil)
+	err := postTemplate(w, "intro-msg", "intro-msg-1", nil)
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-1': %v", err)
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 	err = postTemplate(w, "intro-msg", "intro-msg-2", nil)
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-2': %v", err)
 	}
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 	err = postTemplate(w, "intro-msg", "intro-msg-3", nil)
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-3': %v", err)
 	}
+	time.Sleep(3 * time.Second)
 	return nil
 }
 
@@ -505,7 +506,6 @@ func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID 
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("stream response")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -525,12 +525,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chatMap.Delete(responseID)
-	userChannel := make(chan string, 1)
-	chatMap.Store(responseID, userChannel)
-
-	// Close the channel after time
-
 	var chatHistoryLen int
 	err = chatCountStmt.QueryRow(responseID).Scan(&chatHistoryLen)
 	if err != nil {
@@ -539,16 +533,17 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	chatMap.Delete(responseID)
+	userChannel := make(chan string, 1)
 	if chatHistoryLen == 0 {
+		userChannel <- "Opening argument"
 		if err = streamIntroMsgs(w); err != nil {
 			log.Printf("failed to load intro msgs: %v\n", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		go func() { userChannel <- "opening argument" }()
-
 	}
+	chatMap.Store(responseID, userChannel)
 
 	timer := time.NewTimer(50 * time.Second)
 
