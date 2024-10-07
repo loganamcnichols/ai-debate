@@ -451,7 +451,6 @@ func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID 
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
-	log.Println("stream called")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -473,11 +472,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 	var userChannel chan string
 	if data, ok := chatMap.Load(responseID); ok {
-		log.Printf("found old channel")
 		chanP := data.(*chan string)
 		userChannel = *chanP
 	} else {
-		log.Printf("creating new channel")
 		userChannel = make(chan string, 1)
 		chatMap.Store(responseID, &userChannel)
 	}
@@ -513,11 +510,11 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		userChannel <- "opening argument"
+		go func() { userChannel <- "opening argument" }()
+
 	}
 
 	for userMsg := range userChannel {
-		log.Println("user message", userMsg)
 		timer.Reset(20 * time.Minute)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
@@ -578,8 +575,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			QuestionID: questionID,
 			Role:       secondBotName,
 		}
-
-		log.Printf("posting chat messages")
 
 		err = postTemplate(w, "chat-msg", "chat-msg", userChatMessage)
 		if err != nil {
