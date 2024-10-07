@@ -567,7 +567,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				chatMap.Delete(responseID)
 				return
 			case <-timer.C:
-				fmt.Printf("got here")
 				fmt.Fprintf(w, "event: inactive\ndata: \n\n")
 				flusher.Flush()
 			}
