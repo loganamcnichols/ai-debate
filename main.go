@@ -127,7 +127,7 @@ var chatMap = ChannelMap[uuid.UUID, string]{
 }
 
 var suggestionMap = TimeoutMap[uuid.UUID, []string]{
-	Timeout: 1 * time.Minute,
+	Timeout: 10 * time.Minute,
 	Map:     sync.Map{},
 }
 
