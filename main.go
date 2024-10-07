@@ -257,9 +257,6 @@ func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionSt
 		if err != nil {
 			return
 		}
-		if rand.Float64() > 0.90 {
-			return "", fmt.Errorf("test error")
-		}
 		text += res.Choices[0].Delta.Content
 		fmt.Fprintf(w, msgTmpl, msg.QuestionID.String(), msg.Role, convertToParagraphs(text))
 		flusher.Flush()
