@@ -566,7 +566,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for userMsg := range userChannel {
-		timer.Reset(10 * time.Second)
+		timer.Reset(1 * time.Second)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
