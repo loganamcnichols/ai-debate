@@ -479,7 +479,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		chatMap.Store(responseID, &userChannel)
 	}
 
-	timer := time.NewTimer(10 * time.Second)
+	timer := time.NewTimer(1 * time.Minute)
 
 	// Close the channel after time
 	ctx := r.Context()
