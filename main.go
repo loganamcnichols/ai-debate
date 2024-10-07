@@ -203,6 +203,7 @@ func suggestionSubmit(w http.ResponseWriter, r *http.Request) {
 	var availablePrompts []string
 	availablePrompts, ok := suggestionMap.Load(responseID)
 	if !ok {
+		log.Printf("not ok")
 		availablePrompts = promptCopy()
 		suggestionMap.Store(responseID, availablePrompts)
 	}
@@ -507,6 +508,7 @@ func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID 
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("stream response")
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -526,19 +528,11 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userChannel, ok := chatMap.Load(responseID)
-	if !ok {
-		userChannel = make(chan string, 1)
-		chatMap.Store(responseID, userChannel)
-	}
+	chatMap.Delete(responseID)
+	userChannel := make(chan string, 1)
+	chatMap.Store(responseID, userChannel)
 
 	// Close the channel after time
-	ctx := r.Context()
-	go func() {
-		for range ctx.Done() {
-			chatMap.Delete(responseID)
-		}
-	}()
 
 	var chatHistoryLen int
 	err = chatCountStmt.QueryRow(responseID).Scan(&chatHistoryLen)
@@ -562,10 +556,21 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	timer := time.NewTimer(50 * time.Second)
 
 	go func() {
-		for range timer.C {
-			fmt.Printf("got here")
-			fmt.Fprintf(w, "event: inactive\ndata: \n\n")
-			flusher.Flush()
+		for range r.Context().Done() {
+			chatMap.Delete(responseID)
+		}
+	}()
+	go func() {
+		for {
+			select {
+			case <-r.Context().Done():
+				chatMap.Delete(responseID)
+				return
+			case <-timer.C:
+				fmt.Printf("got here")
+				fmt.Fprintf(w, "event: inactive\ndata: \n\n")
+				flusher.Flush()
+			}
 		}
 	}()
 
