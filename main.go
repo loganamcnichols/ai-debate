@@ -486,9 +486,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		select {
 		case <-timer.C:
+			log.Printf("send inactive event")
 			fmt.Fprint(w, "event: inactive\ndata: \n\n")
 			flusher.Flush()
-			time.Sleep(1 * time.Second)
 			chatMap.Delete(responseID)
 			close(userChannel)
 		case <-ctx.Done():
