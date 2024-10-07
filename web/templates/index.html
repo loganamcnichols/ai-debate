@@ -13,7 +13,7 @@
 <body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}">
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
-                            else if (event.detail.type === 'chat-message') 
+                            else if (event.detail.type === 'chat-msg') 
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
                             else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });"
                         _="on load me.scrollTo({ top: me.scrollHeight,   behavior: 'smooth' })">
