@@ -122,12 +122,12 @@ var client *openai.Client
 var tmpls *template.Template
 var db *sql.DB
 var chatMap = ChannelMap[uuid.UUID, string]{
-	Timeout: 10 * time.Minute,
+	Timeout: 30 * time.Minute,
 	Map:     sync.Map{},
 }
 
 var suggestionMap = TimeoutMap[uuid.UUID, []string]{
-	Timeout: 10 * time.Minute,
+	Timeout: 30 * time.Minute,
 	Map:     sync.Map{},
 }
 
@@ -549,8 +549,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	chatMap.Store(responseID, userChannel)
 
-	inactiveTimer := time.NewTimer(120 * time.Second)
-	keepAliveTicker := time.NewTicker(50 * time.Second)
+	inactiveTimer := time.NewTimer(3 * time.Minute)
+	keepAliveTicker := time.NewTicker(20 * time.Second)
 
 	go func() {
 		for {
@@ -576,7 +576,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 	for userMsg := range userChannel {
 		print("in user msg loop")
-		inactiveTimer.Reset(120 * time.Second)
+		inactiveTimer.Reset(3 * time.Minute)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
