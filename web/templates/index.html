@@ -7,11 +7,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@2.0.2/dist/htmx.js" integrity="sha384-yZq+5izaUBKcRgFbxgkRYwpHhHHCpp5nseXp0MEQ1A4MTWVMnqkmcuFez8x5qfxr" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
-  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
 <body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
-      hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}">
+      hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
+      hx-on::sse-open="console.log('sse open')" sse-close="close" hx-on::sse-close="console.log('sse closed');">
+  <!-- <data sse-swap="keep-alive" hx-swap="none"></data> -->
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
                             else if (event.detail.type === 'chat-msg') 
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
@@ -34,8 +35,8 @@
   {{ if gt (len .QuestionRows) 0 }}
   {{ block "active-form" .ResponseID }}
     <form id="suggestion-form" hx-post="/submit-suggestion?response-id={{ . }}" hx-trigger="submit"> 
-      <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
-              hx-get="prompt-suggestion?response-id={{ . }}" hx-target="this" hx-swap="innerHTML"></button>
+      <!-- <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
+              hx-get="prompt-suggestion?response-id={{ . }}" hx-target="this" hx-swap="innerHTML"></button> -->
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ . }}"
           hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
@@ -75,7 +76,6 @@
     {{ end }}
   </footer>
 <script>
-  htmx.logAll();
   let innovationFirst = true;
   const allowedOrigins = [
     'http://localhost:5173',

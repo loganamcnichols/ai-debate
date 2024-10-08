@@ -5,7 +5,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE response (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   start_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  completed BOOLEAN DEFAULT FALSE,
+  completed BOOLEAN DEFAULT TRUE,
   first_move_innovation BOOLEAN DEFAULT FALSE
 );
 

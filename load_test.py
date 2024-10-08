@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
@@ -43,9 +44,16 @@ async def stream_response(session, response_id, client_id):
             async for line in response.content:
                 chunk = line.decode().strip()
                 if chunk:
-                    print(f"Client {client_id} received: chunk")
-    except asyncio.CancelledError:
-        print(f"Client {client_id} stream cancelled")
+                    print(f"Client {client_id} received: {chunk}")
+    except asyncio.CancelledError as ce:
+        print(f"Client {client_id} stream cancelled. Reason: {ce}")
+    except aiohttp.ClientError as ce:
+        print(f"Client {client_id} encountered a client error: {ce}")
+    except Exception as e:
+        print(f"Client {client_id} encountered an unexpected error:")
+        print(traceback.format_exc())
+    finally:
+        print(f"Client {client_id} stream ended")
 
 async def simulate_client(session, client_id):
     response_id = await create_user(session)

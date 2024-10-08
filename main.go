@@ -139,12 +139,12 @@ var prompts = []string{
 }
 
 var (
-	submitStmt          *sql.Stmt
 	innovationFirstStmt *sql.Stmt
 	chatHistoryStmt     *sql.Stmt
 	insertChatStmt      *sql.Stmt
 	responseInsertStmt  *sql.Stmt
 	chatCountStmt       *sql.Stmt
+	markIncomplete      *sql.Stmt
 	// Add more as needed
 )
 
@@ -506,6 +506,10 @@ func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID 
 }
 
 func streamResponse(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	customFormat := now.Format("2006-01-02 15:04:05.000")
+	log.Println(customFormat)
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -545,28 +549,31 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	chatMap.Store(responseID, userChannel)
 
-	timer := time.NewTimer(50 * time.Second)
+	inactiveTimer := time.NewTimer(120 * time.Second)
+	keepAliveTicker := time.NewTicker(50 * time.Second)
 
-	go func() {
-		for range r.Context().Done() {
-			chatMap.Delete(responseID)
-		}
-	}()
 	go func() {
 		for {
 			select {
 			case <-r.Context().Done():
-				chatMap.Delete(responseID)
 				return
-			case <-timer.C:
+			case <-keepAliveTicker.C:
+				fmt.Fprintf(w, "event: keep-alive\ndata: \n\n")
+			case <-inactiveTimer.C:
 				fmt.Fprintf(w, "event: inactive\ndata: \n\n")
 				flusher.Flush()
+
+				_, err := markIncomplete.Exec(responseID)
+				if err != nil {
+					log.Printf("failed to execute markIncomplete stmt %v\n", err)
+				}
 			}
 		}
 	}()
 
 	for userMsg := range userChannel {
-		timer.Reset(50 * time.Second)
+		print("in user msg loop")
+		inactiveTimer.Reset(120 * time.Second)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -737,8 +744,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	fmt.Fprint(w, "event: close\ndata: Closing connection\n\n")
+	fmt.Fprintf(w, "event: close\ndata: \n\n")
 	flusher.Flush()
 }
 
@@ -880,11 +886,6 @@ func main() {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	submitStmt, err = db.Prepare(`INSERT INTO chat (response_id, user_msg) VALUES ($1, $2) RETURNING id;`)
-	if err != nil {
-		log.Fatalf("Failed to prepare submitStmt: %v", err)
-	}
-
 	innovationFirstStmt, err = db.Prepare(`SELECT first_move_innovation FROM response WHERE id = $1;`)
 	if err != nil {
 		log.Fatalf("Failed to prepare innovationFirstStmt: %v", err)
@@ -911,6 +912,11 @@ func main() {
 		log.Fatalf("Failed to prepare chatCountStmt: %v", err)
 	}
 
+	markIncomplete, err = db.Prepare(`UPDATE response SET completed = FALSE WHERE id = $1`)
+	if err != nil {
+		log.Fatalf("Failed to prepare markIncomplete stmt %v", err)
+	}
+
 	client = openai.NewClient(os.Getenv("OPENAI_API_KEY"))
 
 	r := mux.NewRouter()
@@ -919,17 +925,15 @@ func main() {
 	r.HandleFunc("/", handleIndex)
 	r.HandleFunc("/submit-question", submitQuestion)
 	r.HandleFunc("/submit-suggestion", suggestionSubmit)
+	log.Println("Registering /chat route")
 	r.HandleFunc("/chat", streamResponse)
 	r.HandleFunc("/prompt-suggestion", promptSuggest)
 
 	// Serve static files
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("web")))
 
-	// Use the router as the HTTP handler
-	http.Handle("/", r)
-
 	fmt.Println("Server is running on http://localhost:8080")
-	err = http.ListenAndServe(":8080", nil)
+	err = http.ListenAndServe(":8080", r)
 	if err != nil {
 		fmt.Println("Error starting server:", err)
 	}
