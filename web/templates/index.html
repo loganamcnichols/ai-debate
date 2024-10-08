@@ -11,7 +11,7 @@
 </head>
 <body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
-      hx-on::sse-open="console.log('sse open')" sse-close="close" hx-on::sse-close="console.log('sse closed');">
+      sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <!-- <data sse-swap="keep-alive" hx-swap="none"></data> -->
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
                             else if (event.detail.type === 'chat-msg') 
@@ -93,7 +93,6 @@
 
   // Function to send message to parent
   function sendMessageToParent(type, content) {
-    console.log("sending message:", type);
     if (!isInIframe()) {
       return;
     }
