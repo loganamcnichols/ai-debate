@@ -556,6 +556,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		for {
 			select {
 			case <-r.Context().Done():
+				chatMap.Delete(responseID)
 				return
 			case <-keepAliveTicker.C:
 				fmt.Fprintf(w, "event: keep-alive\ndata: \n\n")
@@ -744,8 +745,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	fmt.Fprintf(w, "event: close\ndata: \n\n")
-	flusher.Flush()
 }
 
 func createResponse() (uuid.UUID, error) {
@@ -767,28 +766,11 @@ func promptCopy() []string {
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	var responseID uuid.UUID
-	cookie, err := r.Cookie("response-id")
-	if err == http.ErrNoCookie {
-		responseID, err = createResponse()
-		if err != nil {
-			log.Print(err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		http.SetCookie(w, &http.Cookie{
-			Name:  "response-id",
-			Value: responseID.String(),
-			Path:  "/",
-		})
-
-	} else {
-		responseID, err = uuid.Parse(cookie.Value)
-		if err != nil {
-			log.Printf("unable to parse cookie: %v\n", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
+	responseID, err := createResponse()
+	if err != nil {
+		log.Print(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	var innovationFirst bool
