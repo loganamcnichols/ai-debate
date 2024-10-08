@@ -348,17 +348,17 @@ func streamIntroMsgs(w http.ResponseWriter) error {
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-1': %v", err)
 	}
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 	err = postTemplate(w, "intro-msg", "intro-msg-2", nil)
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-2': %v", err)
 	}
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 	err = postTemplate(w, "intro-msg", "intro-msg-3", nil)
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-3': %v", err)
 	}
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 	return nil
 }
 
