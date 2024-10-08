@@ -559,7 +559,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				chatMap.Delete(responseID)
 				return
 			case <-keepAliveTicker.C:
+				log.Printf("hit keep alive ticker")
 				fmt.Fprintf(w, "event: keep-alive\ndata: \n\n")
+				flusher.Flush()
 			case <-inactiveTimer.C:
 				fmt.Fprintf(w, "event: inactive\ndata: \n\n")
 				flusher.Flush()
