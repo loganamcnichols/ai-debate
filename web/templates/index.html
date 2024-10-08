@@ -12,7 +12,7 @@
 <body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
-  <!-- <data sse-swap="keep-alive" hx-swap="none"></data> -->
+  <data sse-swap="keep-alive" hx-swap="none"></data>
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
                             else if (event.detail.type === 'chat-msg') 
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
