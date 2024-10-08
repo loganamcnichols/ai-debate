@@ -35,8 +35,8 @@
   {{ if gt (len .QuestionRows) 0 }}
   {{ block "active-form" .ResponseID }}
     <form id="suggestion-form" hx-post="/submit-suggestion?response-id={{ . }}" hx-trigger="submit"> 
-      <!-- <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
-              hx-get="prompt-suggestion?response-id={{ . }}" hx-target="this" hx-swap="innerHTML"></button> -->
+      <button id="prompt-button" type="submit" hx-trigger="every 5s, load consume" 
+              hx-get="prompt-suggestion?response-id={{ . }}" hx-target="this" hx-swap="innerHTML"></button>
     </form>
     <form id="submission-form" hx-post="/submit-question?response-id={{ . }}"
           hx-trigger="keydown[key==='Enter'&&!shiftKey], submit, opening" 
