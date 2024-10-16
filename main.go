@@ -29,7 +29,7 @@ type QuestionRow struct {
 	QuestionID    uuid.UUID `db:"id"`
 	ResponseID    uuid.UUID `db:"response_id"`
 	UserMsg       string    `db:"user_msg"`
-	CautionMsg    string    `db:"caution_msg"`
+	SafetyMsg     string    `db:"safety_msg"`
 	InnovationMsg string    `db:"innovation_msg"`
 	CreateTime    time.Time `db:"create_time"`
 }
@@ -45,7 +45,7 @@ func (q *QuestionRow) Scan(rows *sql.Rows) error {
 		&q.QuestionID,
 		&q.ResponseID,
 		&q.UserMsg,
-		&q.CautionMsg,
+		&q.SafetyMsg,
 		&q.InnovationMsg,
 		&q.CreateTime,
 	)
@@ -296,7 +296,7 @@ func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionSt
 
 	msgTmpl := "event: %s-%s\ndata: %s\n\n"
 
-	throttle := time.NewTicker(200 * time.Millisecond)
+	throttle := time.NewTicker(20 * time.Millisecond)
 	defer throttle.Stop()
 
 	for range throttle.C {
@@ -388,8 +388,8 @@ func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMes
 				},
 				{
 					QuestionID: nextRow.QuestionID,
-					Role:       "CautionBot",
-					Content:    nextRow.CautionMsg,
+					Role:       "SafetyBot",
+					Content:    nextRow.SafetyMsg,
 				},
 			}...)
 		} else {
@@ -401,8 +401,8 @@ func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMes
 				},
 				{
 					QuestionID: nextRow.QuestionID,
-					Role:       "CautionBot",
-					Content:    nextRow.CautionMsg,
+					Role:       "SafetyBot",
+					Content:    nextRow.SafetyMsg,
 				},
 				{
 					QuestionID: nextRow.QuestionID,
@@ -447,23 +447,23 @@ func formatMessages(responseID uuid.UUID) ([]openai.ChatCompletionMessage, bool,
 				},
 				{
 					Role:    "user",
-					Content: formatSecondMessage("Caution Bot"),
+					Content: formatSecondMessage("Safety Bot"),
 				},
 				{
 					Role:    "assistant",
-					Name:    "CautionBot",
-					Content: nextRow.CautionMsg,
+					Name:    "SafetyBot",
+					Content: nextRow.SafetyMsg,
 				}}...)
 		} else {
 			messages = append(messages, []openai.ChatCompletionMessage{
 				{
 					Role:    "user",
-					Content: formatFirstMessage(nextRow.UserMsg, "Caution Bot"),
+					Content: formatFirstMessage(nextRow.UserMsg, "Safety Bot"),
 				},
 				{
 					Role:    "assistant",
-					Name:    "CautionBot",
-					Content: nextRow.CautionMsg,
+					Name:    "SafetyBot",
+					Content: nextRow.SafetyMsg,
 				},
 				{
 					Role:    "user",
@@ -494,7 +494,7 @@ func processStreamError(w http.ResponseWriter, responseID uuid.UUID, questionID 
 	flusher.Flush()
 	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "InnovateBot")
 	flusher.Flush()
-	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "CautionBot")
+	fmt.Fprintf(w, "event: %s-%s-delete\ndata: <p></p>\n\n", questionID.String(), "SafetyBot")
 	flusher.Flush()
 	postTemplate(w, "active-form", "form-error.html", struct {
 		ResponseID string
@@ -590,20 +590,20 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 
 		if innovateNext {
 			firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
-			secondPromptFile = "PRO_CAUTION_PROMPT.txt"
+			secondPromptFile = "PRO_SAFETY_PROMPT.txt"
 
 			firstBotName = "InnovateBot"
-			secondBotName = "CautionBot"
+			secondBotName = "SafetyBot"
 
 			fmt.Fprint(w, "event: innovation-first\ndata: true\n\n")
 
 			flusher.Flush()
 
 		} else {
-			firstPromptFile = "PRO_CAUTION_PROMPT.txt"
+			firstPromptFile = "PRO_SAFETY_PROMPT.txt"
 			secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
 
-			firstBotName = "CautionBot"
+			firstBotName = "SafetyBot"
 			secondBotName = "InnovateBot"
 
 			fmt.Fprintf(w, "event: innovation-first\ndata: false\n\n")
@@ -616,7 +616,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		}
 		secondSystemPrompt, err := os.ReadFile(secondPromptFile)
 		if err != nil {
-			log.Printf("unable to read caution prompt: %v", err)
+			log.Printf("unable to read safety prompt: %v", err)
 		}
 
 		questionID := uuid.New()
@@ -880,7 +880,7 @@ func main() {
 		log.Fatalf("Failed to prepare chatHistoryStmt: %v", err)
 	}
 
-	insertChatStmt, err = db.Prepare(`INSERT INTO chat (id, response_id, user_msg, caution_msg, innovation_msg)
+	insertChatStmt, err = db.Prepare(`INSERT INTO chat (id, response_id, user_msg, safety_msg, innovation_msg)
 																							VALUES ($1, $2, $3, $4, $5);`)
 	if err != nil {
 		log.Fatalf("Failed to prepare updateChatStmt: %v", err)

@@ -14,7 +14,7 @@ CREATE TABLE chat (
   id UUID PRIMARY KEY,
   response_id UUID REFERENCES response(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   user_msg TEXT NOT NULL,
-  caution_msg TEXT DEFAULT '',
+  safety_msg TEXT DEFAULT '',
   innovation_msg TEXT DEFAULT '',
   created_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
