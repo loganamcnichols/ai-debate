@@ -296,7 +296,7 @@ func streamOpenaiResponse(w http.ResponseWriter, stream *openai.ChatCompletionSt
 
 	msgTmpl := "event: %s-%s\ndata: %s\n\n"
 
-	throttle := time.NewTicker(20 * time.Millisecond)
+	throttle := time.NewTicker(200 * time.Millisecond)
 	defer throttle.Stop()
 
 	for range throttle.C {

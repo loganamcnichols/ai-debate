@@ -169,6 +169,12 @@ a:visited {
     color: inherit; /* Remove the default visited color change */
 }
 
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+}
+
+
 
 .textbar
 {
