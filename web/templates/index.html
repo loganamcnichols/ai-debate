@@ -13,6 +13,7 @@
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <data sse-swap="keep-alive" hx-swap="none"></data>
+  <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}s"></data>
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
                             else if (event.detail.type === 'chat-msg') 
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});

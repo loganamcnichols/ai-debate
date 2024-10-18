@@ -3,7 +3,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
 	"database/sql"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -11,7 +15,9 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,11 +25,54 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/schema"
 	"github.com/sashabaranov/go-openai"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
+
+var TEMPLATE_PARAMS = url.Values{
+	"responseID":   []string{"[%RID%]"},
+	"panelistID":   []string{"[%PID%]"},
+	"supplierID":   []string{"[%PID%]"},
+	"age":          []string{"[%AGE%]"},
+	"gender":       []string{"[%GENDER%]"},
+	"hispanic":     []string{"[%HISPANIC%]"},
+	"ethnicity":    []string{"[%ETHNICITY%]"},
+	"standardVote": []string{"[%STANDARD_VOTE%]"},
+	"zip":          []string{"[%ZIP%]"},
+}
+
+var (
+	innovationFirstStmt     *sql.Stmt
+	surveyInsertStmt        *sql.Stmt
+	responseQueryStmt       *sql.Stmt
+	responseUpdateStmt      *sql.Stmt
+	chatHistoryStmt         *sql.Stmt
+	insertChatStmt          *sql.Stmt
+	responseInsertStmt      *sql.Stmt
+	lucidResponseInsertStmt *sql.Stmt
+	chatCountStmt           *sql.Stmt
+	markIncomplete          *sql.Stmt
+)
+
+var (
+	TEMPLATE_LINK              *url.URL
+	SURVEY_ENDPOINT            *url.URL
+	PROJECT_ENDPOINT           *url.URL
+	QUALIFICATION_ENDPOINT     *url.URL
+	EXCHANGE_TEMPLATE_ENDPOINT *url.URL
+	COMPLETE_URL               *url.URL
+	SURVEYOR_CLIENT_ID         = 9676
+	BLOCKED_VENDOR_TEMPLATE_ID = 1839
+)
+
+type Qualification struct {
+	Name       string
+	QuestionID int
+	PreCodes   []string
+}
 
 type QuestionRow struct {
 	QuestionID    uuid.UUID `db:"id"`
@@ -34,10 +83,173 @@ type QuestionRow struct {
 	CreateTime    time.Time `db:"create_time"`
 }
 
+type SurveyResponse struct {
+	ResponseID        *uuid.UUID `db:"id" schema:"id"`
+	SurveyID          *uuid.UUID `db:"survey_id" schema:"survey_id"`
+	StartTime         *time.Time `db:"start_time" schema:"start_time"`
+	WhichLLM          string     `db:"which_llm" schema:"which_llm"`
+	AISpeed           string     `db:"ai_speed" schema:"ai_speed"`
+	MuskOpinion       string     `db:"musk_opinion" schema:"musk_opinion"`
+	PattersonOpinion  string     `db:"patterson_opinion" schema:"patterson_opinion"`
+	KensingtonOpinion string     `db:"kensington_opinion" schema:"kensington_opinion"`
+	Potholes          string     `db:"potholes" schema:"potholes"`
+}
+
+func (sq *SurveyResponse) Scan(row *sql.Row) error {
+	return row.Scan(
+		&sq.ResponseID,
+		&sq.SurveyID,
+		&sq.StartTime,
+		&sq.WhichLLM,
+		&sq.AISpeed,
+		&sq.MuskOpinion,
+		&sq.PattersonOpinion,
+		&sq.KensingtonOpinion,
+		&sq.Potholes,
+	)
+}
+
+func (sq *SurveyResponse) Update() error {
+	_, err := responseUpdateStmt.Exec(
+		sq.WhichLLM,
+		sq.AISpeed,
+		sq.MuskOpinion,
+		sq.PattersonOpinion,
+		sq.KensingtonOpinion,
+		sq.Potholes,
+		sq.ResponseID,
+	)
+	return err
+}
+
+func (sq *SurveyResponse) NoneNull() bool {
+	return (sq.SurveyID != nil &&
+		sq.StartTime != nil &&
+		sq.WhichLLM != "" &&
+		sq.AISpeed != "" &&
+		sq.MuskOpinion != "" &&
+		sq.PattersonOpinion != "" &&
+		sq.KensingtonOpinion != "" &&
+		sq.Potholes != "")
+}
+
 type ChatMessage struct {
 	QuestionID uuid.UUID
 	Role       string
 	Content    string
+}
+
+type QuantityType string
+
+const (
+	PRESCREENS QuantityType = "prescreens"
+	COMPLETES  QuantityType = "completes"
+)
+
+type SurveyRequest struct {
+	BusinessUnitID int          `json:"business_unit_id"`
+	Locale         string       `json:"locale"`
+	Name           string       `json:"name"`
+	ProjectID      int          `json:"project_id"`
+	CollectsPII    bool         `json:"collects_pii"`
+	LiveURL        string       `json:"live_url"`
+	Quantity       int          `json:"quantity"`
+	QuantityType   QuantityType `json:"quantity_calc_type"`
+	Status         string       `json:"status"`
+	TestURL        string       `json:"test_url"`
+	SurveyCPIUsed  float32      `json:"survey_cpi_used"`
+	StudyType      string       `json:"study_type"`
+	Industry       string       `json:"industry"`
+	CompletionRate float32      `json:"expected_incidence_rate"`
+	SurveyMinutes  int          `json:"expected_completion_loi"`
+}
+
+func newSurveyRequest(name string, projectID int, prescreens int, chatTime int) *SurveyRequest {
+	templateLink := *TEMPLATE_LINK
+	templateLink.RawQuery = TEMPLATE_PARAMS.Encode()
+	return &SurveyRequest{
+		BusinessUnitID: 3175,
+		Locale:         "eng_us",
+		Name:           name,
+		ProjectID:      projectID,
+		CollectsPII:    false,
+		LiveURL:        templateLink.String(),
+		Quantity:       prescreens,
+		QuantityType:   PRESCREENS,
+		Status:         "awarded",
+		TestURL:        templateLink.String(),
+		SurveyCPIUsed:  0.5,
+		StudyType:      "adhoc",
+		Industry:       "other",
+		CompletionRate: 1.0,
+		SurveyMinutes:  chatTime + 5, // 5 minutes for answering the actual questions
+	}
+}
+
+// ConvertString converts a string to a UUID
+func ConvertString(value string) reflect.Value {
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return reflect.Value{}
+	}
+	return reflect.ValueOf(id)
+}
+
+func range18Plus() []string {
+	var ages []string
+	for i := 18; i < 100; i++ {
+		ages = append(ages, fmt.Sprint(i))
+	}
+	return ages
+}
+
+func addQualifications(lucidID int) error {
+	client := http.Client{}
+	qualifations := []Qualification{
+		{
+			Name:       "AGE",
+			QuestionID: 42,
+			PreCodes:   range18Plus(),
+		},
+		{
+			Name:       "GENDER",
+			QuestionID: 43,
+		},
+		{
+			Name:       "HISPANIC",
+			QuestionID: 47,
+		},
+		{
+			Name:       "ETHNICITY",
+			QuestionID: 113,
+		},
+		{
+			Name:       "STANDARD_VOTE",
+			QuestionID: 634,
+		},
+		{
+			Name:       "ZIP",
+			QuestionID: 45,
+		},
+	}
+	for _, qual := range qualifations {
+		data, err := json.Marshal(qual)
+		if err != nil {
+			return err
+		}
+		target := fmt.Sprintf(QUALIFICATION_ENDPOINT.String(), lucidID)
+		req, err := http.NewRequest("POST", target, bytes.NewBuffer(data))
+		if err != nil {
+			return fmt.Errorf("unable to create qualification request: %v", err)
+		}
+		addLucidHeaders(req)
+
+		_, err = client.Do(req)
+		if err != nil {
+			return fmt.Errorf("unable to add qualification: %v", err)
+		}
+	}
+	return nil
 }
 
 func (q *QuestionRow) Scan(rows *sql.Rows) error {
@@ -137,16 +349,6 @@ var prompts = []string{
 	"What has been the impact of laws about AI?",
 	"What would happen if we slowed down AI?",
 }
-
-var (
-	innovationFirstStmt *sql.Stmt
-	chatHistoryStmt     *sql.Stmt
-	insertChatStmt      *sql.Stmt
-	responseInsertStmt  *sql.Stmt
-	chatCountStmt       *sql.Stmt
-	markIncomplete      *sql.Stmt
-	// Add more as needed
-)
 
 func promptSuggest(w http.ResponseWriter, r *http.Request) {
 	params := r.URL.Query()
@@ -362,59 +564,59 @@ func streamIntroMsgs(w http.ResponseWriter) error {
 	return nil
 }
 
-func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMessage, error) {
-	messages := []ChatMessage{}
-	rows, err := chatHistoryStmt.Query(responseID)
-	if err != nil {
-		return messages, fmt.Errorf("failed to execute chatHistoryStmt: %v", err)
-	}
-	defer rows.Close()
-	var nextRow QuestionRow
-	for rows.Next() {
-		if err := nextRow.Scan(rows); err != nil {
-			return messages, err
-		}
-		if innovateFirst {
-			messages = append(messages, []ChatMessage{
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "user",
-					Content:    nextRow.UserMsg,
-				},
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "InnovateBot",
-					Content:    nextRow.InnovationMsg,
-				},
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "SafetyBot",
-					Content:    nextRow.SafetyMsg,
-				},
-			}...)
-		} else {
-			messages = append(messages, []ChatMessage{
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "user",
-					Content:    nextRow.UserMsg,
-				},
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "SafetyBot",
-					Content:    nextRow.SafetyMsg,
-				},
-				{
-					QuestionID: nextRow.QuestionID,
-					Role:       "InnovateBot",
-					Content:    nextRow.InnovationMsg,
-				},
-			}...)
-		}
-		innovateFirst = !innovateFirst
-	}
-	return messages, nil
-}
+// func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMessage, error) {
+// 	messages := []ChatMessage{}
+// 	rows, err := chatHistoryStmt.Query(responseID)
+// 	if err != nil {
+// 		return messages, fmt.Errorf("failed to execute chatHistoryStmt: %v", err)
+// 	}
+// 	defer rows.Close()
+// 	var nextRow QuestionRow
+// 	for rows.Next() {
+// 		if err := nextRow.Scan(rows); err != nil {
+// 			return messages, err
+// 		}
+// 		if innovateFirst {
+// 			messages = append(messages, []ChatMessage{
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "user",
+// 					Content:    nextRow.UserMsg,
+// 				},
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "InnovateBot",
+// 					Content:    nextRow.InnovationMsg,
+// 				},
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "SafetyBot",
+// 					Content:    nextRow.SafetyMsg,
+// 				},
+// 			}...)
+// 		} else {
+// 			messages = append(messages, []ChatMessage{
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "user",
+// 					Content:    nextRow.UserMsg,
+// 				},
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "SafetyBot",
+// 					Content:    nextRow.SafetyMsg,
+// 				},
+// 				{
+// 					QuestionID: nextRow.QuestionID,
+// 					Role:       "InnovateBot",
+// 					Content:    nextRow.InnovationMsg,
+// 				},
+// 			}...)
+// 		}
+// 		innovateFirst = !innovateFirst
+// 	}
+// 	return messages, nil
+// }
 
 func formatMessages(responseID uuid.UUID) ([]openai.ChatCompletionMessage, bool, error) {
 	messages := []openai.ChatCompletionMessage{{}}
@@ -749,59 +951,337 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createResponse() (uuid.UUID, error) {
-	randomValue := rand.Float64()
-	var query string
-	var responseID uuid.UUID
-	err := responseInsertStmt.QueryRow(randomValue > 0.5).Scan(&responseID)
-	if err != nil {
-		return responseID, fmt.Errorf("error executing query %s: %v", query, err)
-	}
-	return responseID, nil
-}
-
 func promptCopy() []string {
 	dst := make([]string, len(prompts))
 	copy(dst, prompts)
 	return dst
 }
 
-func handleIndex(w http.ResponseWriter, r *http.Request) {
-	var responseID uuid.UUID
-	responseID, err := createResponse()
+func createHmacSHA1(message, secret string) []byte {
+	key := []byte(secret)
+	h := hmac.New(sha1.New, key)
+	h.Write([]byte(message))
+	return h.Sum(nil)
+}
+
+func generateHash(url, key string) string {
+	rawHash := createHmacSHA1(url, key)
+	base64Hash := base64.StdEncoding.EncodeToString(rawHash)
+
+	// Replace '+' with '-', '/' with '_', and remove '='
+	hash := strings.NewReplacer("+", "-", "/", "_").Replace(base64Hash)
+	hash = strings.TrimRight(hash, "=")
+
+	return hash
+}
+
+func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID uuid.UUID) {
+	if survey.SurveyID == nil {
+		err := tmpls.ExecuteTemplate(w, "non-lucid-complete.html", nil)
+		if err != nil {
+			log.Printf("unable to execute non-lucid complete: %v\n", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+	} else {
+		completeURL := *COMPLETE_URL
+		params := completeURL.Query()
+		params.Add("RIS", "10")
+		params.Add("RID", responseID.String())
+		completeURL.RawQuery = params.Encode()
+		hash := generateHash(completeURL.String(), os.Getenv("COMPLETE_KEY"))
+		params.Add("hash", hash)
+		completeURL.RawQuery = params.Encode()
+		w.Header().Set("Hx-Redirect", completeURL.String())
+	}
+}
+
+func handleSurvey(w http.ResponseWriter, r *http.Request) {
+	var pageCount = 2
+	var survey SurveyResponse
+	decoder := schema.NewDecoder()
+	decoder.IgnoreUnknownKeys(true)
+	decoder.RegisterConverter(uuid.UUID{}, ConvertString)
+	responseID, err := uuid.Parse(r.URL.Query().Get("response-id"))
 	if err != nil {
-		log.Print(err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("unable to parse reponse id %s: %v\n", r.URL.Query().Get("response-id"), err)
+		http.Error(w, "invalid response-id", http.StatusBadRequest)
+		return
+	}
+	err = r.ParseForm()
+	if err != nil {
+		log.Printf("error parsing form: %v\n", err)
+	}
+	navigate := r.FormValue("navigate")
+	page, err := strconv.Atoi(r.FormValue("page"))
+	if err != nil {
+		log.Printf("unable to convert page %s: %v", r.FormValue("page"), err)
+		http.Error(w, "expected page parameter as an int", http.StatusBadRequest)
+		return
+	}
+	err = survey.Scan(responseQueryStmt.QueryRow(responseID))
+	if err != nil {
+		log.Printf("error scanning survey questions: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if r.Method == "GET" {
+		tmplName := fmt.Sprintf("survey-page-%d", page)
+		err = tmpls.ExecuteTemplate(w, tmplName, survey)
+		if err != nil {
+			log.Printf("error execution template %s: %v", tmplName, err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	} else if r.Method == "POST" {
+		var missing bool
+		for _, vals := range r.PostForm {
+			if vals[len(vals)-1] == "missing" {
+				missing = true
+			}
+		}
+		if navigate == "next" && !missing {
+			page += 1
+		} else if navigate == "previous" {
+			page -= 1
+		}
+		if page > pageCount {
+			completeSurvey(w, survey, responseID)
+			return
+		}
+		err = decoder.Decode(&survey, r.PostForm)
+		if err != nil {
+			log.Printf("unable to decode form: %v\n", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		err = survey.Update()
+		if err != nil {
+			log.Printf("failed to update survey: %v\n", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+
+		tmplName := fmt.Sprintf("survey-page-%d", page)
+		err = tmpls.ExecuteTemplate(w, tmplName, survey)
+		if err != nil {
+			log.Printf("error execution template %s: %v", tmplName, err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+}
+
+func createProject(name string) (int, error) {
+	projectData := struct {
+		Name     string `json:"name"`
+		ClientID int    `json:"client_id"`
+	}{
+		Name:     name,
+		ClientID: SURVEYOR_CLIENT_ID,
+	}
+	data, err := json.Marshal(projectData)
+	if err != nil {
+		return 0, fmt.Errorf("unable to marshal %v: %v", projectData, err)
+	}
+	req, err := http.NewRequest("POST", PROJECT_ENDPOINT.String(), bytes.NewBuffer(data))
+	if err != nil {
+		return 0, fmt.Errorf("unable to make request for %s with %v: %v", PROJECT_ENDPOINT, data, err)
+	}
+
+	addLucidHeaders(req)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("error sending request: %v", err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("unable to read response body: %v", err)
+	}
+
+	var respTmpl struct {
+		ID int `json:"id"`
+	}
+	err = json.Unmarshal(body, &respTmpl)
+	if err != nil {
+		return 0, fmt.Errorf("unable to unmarshal %s: %v", body, err)
+	}
+
+	return respTmpl.ID, nil
+}
+
+func addLucidHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authentication", os.Getenv("LUCIDHQ_API_KEY"))
+}
+
+func createSurvey(name string, projectID int, prescreens int, chatTime int) (int, error) {
+	requestParams := newSurveyRequest(name, projectID, prescreens, chatTime)
+	data, err := json.Marshal(requestParams)
+	if err != nil {
+		return 0, fmt.Errorf("unable to marshal SurveyRequest: %v", err)
+	}
+	req, err := http.NewRequest("POST", SURVEY_ENDPOINT.String(), bytes.NewBuffer(data))
+	if err != nil {
+		return 0, fmt.Errorf("unable to create new survey request: %v", err)
+	}
+
+	addLucidHeaders(req)
+
+	client := http.Client{}
+	res, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create new survey: %v", err)
+	}
+	var respTmpl struct {
+		ID  int       `json:"id"`
+		SID uuid.UUID `json:"sid"`
+	}
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return 0, fmt.Errorf("unable to read response boody: %v", err)
+	}
+
+	err = json.Unmarshal(body, &respTmpl)
+
+	return respTmpl.ID, err
+}
+
+func applyBlockedVendorTemplate(surveyID int) error {
+	exchangeTemplateEndpoint := EXCHANGE_TEMPLATE_ENDPOINT.JoinPath(fmt.Sprint(surveyID), fmt.Sprint(BLOCKED_VENDOR_TEMPLATE_ID))
+	endpoint := fmt.Sprintf(exchangeTemplateEndpoint.String(), surveyID, BLOCKED_VENDOR_TEMPLATE_ID)
+	req, err := http.NewRequest("POST", endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("unable to create request to %s: %v", EXCHANGE_TEMPLATE_ENDPOINT, err)
+	}
+	addLucidHeaders(req)
+
+	client := http.Client{}
+	_, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("unable to complete block bendor template post: %v", err)
+	}
+	return nil
+}
+
+func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authentication") != os.Getenv("LUCIDHQ_API_KEY") {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 
-	var innovationFirst bool
-	err = innovationFirstStmt.QueryRow(responseID).Scan(&innovationFirst)
+	surveyID, err := uuid.NewUUID()
 	if err != nil {
-		log.Printf("unable to execute query innovation first stmt: %v\n", err)
-		responseID, err = createResponse()
-		if err != nil {
-			log.Print(err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
-		http.SetCookie(w, &http.Cookie{
-			Name:  "response-id",
-			Value: responseID.String(),
-			Path:  "/",
-		})
-		query := "SELECT first_move_innovation FROM response WHERE id = $1"
-		var innovationFirst bool
-		err = db.QueryRow(query, responseID).Scan(&innovationFirst)
-		if err != nil {
-			log.Print(err)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		}
+		log.Printf("unable to create new uuid: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
 	}
 
-	messages, err := formatTemplateMessages(responseID, innovationFirst)
+	chatTimeParam := r.FormValue("chatTime")
+	prescreenParam := r.FormValue("prescreens")
+
+	chatTime, chatTimeErr := strconv.Atoi(chatTimeParam)
+	prescreens, prescreensErr := strconv.Atoi(prescreenParam)
+
+	if chatTimeErr != nil {
+		log.Printf("received invalid chatTime parameter %s: %v", chatTimeParam, chatTimeErr)
+		http.Error(w, "recieved invalid chatTime parameter", http.StatusBadRequest)
+		return
+	}
+	if prescreensErr != nil {
+		log.Printf("received invalid prescreen parameter %s: %v", prescreenParam, prescreensErr)
+		http.Error(w, "recieved invalid chatTime parameter", http.StatusBadRequest)
+		return
+	}
+
+	surveyName := fmt.Sprintf("AI Debate %v", time.Now())
+	projectID, err := createProject(surveyName)
 	if err != nil {
-		log.Printf("unable to format template messages: %v\n", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Println(err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	lucidID, err := createSurvey(surveyName, projectID, prescreens, chatTime)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = addQualifications(lucidID)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	err = applyBlockedVendorTemplate(lucidID)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	_, err = surveyInsertStmt.Exec(surveyID, lucidID, chatTime)
+	if err != nil {
+		log.Printf("unable to execute surveyInsertStmt: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
+	var err error
+	vars := mux.Vars(r)
+	params := r.URL.Query()
+	surveyID, surveyErr := uuid.Parse(vars["surveyID"])
+	var responseID, panelistID, supplierID uuid.UUID
+	var responseErr, panelistErr, supplierErr error
+	responseID, responseErr = uuid.Parse(params.Get("responseID"))
+	panelistID, panelistErr = uuid.Parse(params.Get("panelistID"))
+	supplierID, supplierErr = uuid.Parse(params.Get("supplierID"))
+
+	if surveyErr != nil {
+		log.Printf("error parsing surveyID %s: %v\n", vars["surveyID"], err)
+	}
+	if responseErr != nil {
+		log.Printf("error parsing responseID %s: %v\n", params.Get("responseID"), err)
+	}
+	if panelistErr != nil {
+		log.Printf("error parsing panelistID %s: %v\n", params.Get("panelistID"), err)
+	}
+	if supplierErr != nil {
+		log.Printf("error parsing supplierID %s: %v\n", params.Get("supplierID"), err)
+	}
+
+	age := params.Get("age")
+	zip := params.Get("zip")
+	gender := params.Get("gender")
+	hispanic := params.Get("hispanic")
+	ethnicity := params.Get("ethnicity")
+	standardVote := params.Get("standardVote")
+
+	if age == "" ||
+		zip == "" ||
+		gender == "" ||
+		hispanic == "" ||
+		ethnicity == "" ||
+		standardVote == "" {
+		log.Println("one of the params is missing")
+	}
+
+	innovateFirst := (rand.Float32() > 0.5)
+
+	_, err = lucidResponseInsertStmt.Exec(responseID, surveyID, panelistID, supplierID, age, zip, gender, hispanic, ethnicity, standardVote, innovateFirst)
+	if err != nil {
+		log.Printf("error executing lucidResponseInsertStmt: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -809,7 +1289,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		QuestionRows []ChatMessage
 		ResponseID   string
 	}{
-		QuestionRows: messages,
+		QuestionRows: []ChatMessage{},
 		ResponseID:   responseID.String(),
 	}
 
@@ -820,9 +1300,67 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	var err error
+	var responseID *uuid.UUID
+	innovateFirst := (rand.Float32() > 0.5)
+	err = responseInsertStmt.QueryRow(innovateFirst).Scan(&responseID)
+	if err != nil {
+		log.Printf("unable to create a new uuid: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var data = struct {
+		QuestionRows []ChatMessage
+		ResponseID   string
+		ChatTime     int
+	}{
+		QuestionRows: []ChatMessage{},
+		ResponseID:   responseID.String(),
+		ChatTime:     10,
+	}
+
+	err = tmpls.ExecuteTemplate(w, "index.html", data)
+	if err != nil {
+		log.Printf("error executing template: %v\n", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+func initURLs() {
+	var err error
+	TEMPLATE_LINK, err = url.Parse("https://ai-debate.org")
+	if err != nil {
+		log.Printf("unable to parse 'https://ai-debate.org'")
+	}
+	SURVEY_ENDPOINT, err = url.Parse("https://api.samplicio.us/demand/v2-beta/surveys")
+	if err != nil {
+		log.Printf("unable to parse 'https://api.samplicio.us/demand/v2-beta/surveys'")
+	}
+	PROJECT_ENDPOINT, err = url.Parse("https://api.samplicio.us/demand/v2-beta/projects")
+	if err != nil {
+		log.Printf("unable to parse 'https://api.samplicio.us/demand/v2-beta/projects'")
+	}
+	QUALIFICATION_ENDPOINT, err = url.Parse("https://api.samplicio.us/Demand/v1/SurveyQualification/Create")
+	if err != nil {
+		log.Printf("unable to parse 'https://api.samplicio.us/Demand/v1/SurveyQualification/Create'")
+	}
+	EXCHANGE_TEMPLATE_ENDPOINT, err = url.Parse("https://api.samplicio.us/ExchangeTemplates/ApplyToSurvey")
+	if err != nil {
+		log.Printf("unable to parse 'https://api.samplicio.us/ExchangeTemplates/ApplyToSurvey'")
+	}
+	COMPLETE_URL, err = url.Parse("https://www.samplicio.us/router/ClientCallBack.aspx")
+	if err != nil {
+		log.Printf("unable to parse 'https://www.samplicio.us/router/ClientCallBack.aspx'")
+	}
+}
+
 func main() {
 	// Get current timestamp
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
+
+	initURLs()
 
 	// Create log filename with timestamp
 	logFileName := fmt.Sprintf("app_%s.log", timestamp)
@@ -870,9 +1408,42 @@ func main() {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	innovationFirstStmt, err = db.Prepare(`SELECT first_move_innovation FROM response WHERE id = $1;`)
+	innovationFirstStmt, err = db.Prepare(`SELECT innovate_first FROM response WHERE id = $1;`)
 	if err != nil {
 		log.Fatalf("Failed to prepare innovationFirstStmt: %v", err)
+	}
+
+	surveyInsertStmt, err = db.Prepare(`INSERT INTO survey (id, lucid_id, chat_time) VALUES ($1, $2, $3);`)
+	if err != nil {
+		log.Fatalf("Failed to prepare surveyInsertStmt: %v\n", err)
+	}
+
+	responseQueryStmt, err = db.Prepare(`SELECT
+																			 id,
+																			 survey_id,
+																			 start_time,
+	                                     which_llm, 
+	                                     ai_speed, 
+	                                     musk_opinion, 
+	                                     patterson_opinion, 
+																			 kensington_opinion, 
+																			 potholes
+																FROM response WHERE id = $1`)
+	if err != nil {
+		log.Fatalf("Failed to prepare startTimeStmt: %v\n", err)
+	}
+
+	responseUpdateStmt, err = db.Prepare(`
+	UPDATE response
+	SET which_llm = $1,
+			ai_speed = $2,
+			musk_opinion = $3,
+			patterson_opinion = $4,
+			kensington_opinion = $5,
+			potholes = $6
+	WHERE id = $7`)
+	if err != nil {
+		log.Fatalf("Failed to prepare responseUpdateStmt: %v\n", err)
 	}
 
 	chatHistoryStmt, err = db.Prepare(`SELECT * FROM chat WHERE response_id = $1 ORDER BY created_time;`)
@@ -886,9 +1457,15 @@ func main() {
 		log.Fatalf("Failed to prepare updateChatStmt: %v", err)
 	}
 
-	responseInsertStmt, err = db.Prepare(`INSERT INTO response (first_move_innovation) VALUES ($1) RETURNING id`)
+	responseInsertStmt, err = db.Prepare(`INSERT INTO response (innovate_first) VALUES ($1) RETURNING id`)
 	if err != nil {
 		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
+	}
+
+	lucidResponseInsertStmt, err = db.Prepare(`INSERT INTO response (id, survey_id, panelist_id, supplier_id, age, zip, gender, hispanic, ethnicity, standard_vote, innovate_first)
+	                                                          VALUES ($1, $2,       $3,         $4,         $5,  $6,  $7,     $8,       $9,        $10,           $11)`)
+	if err != nil {
+		log.Fatalf("Failed to prepare lucidResponseInsertStmt: %v", err)
 	}
 
 	chatCountStmt, err = db.Prepare(`SELECT COUNT(*) FROM chat WHERE response_id = $1`)
@@ -905,16 +1482,15 @@ func main() {
 
 	r := mux.NewRouter()
 
-	// Define your routes
-	r.HandleFunc("/", handleIndex)
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 	r.HandleFunc("/submit-question", submitQuestion)
 	r.HandleFunc("/submit-suggestion", suggestionSubmit)
-	log.Println("Registering /chat route")
 	r.HandleFunc("/chat", streamResponse)
 	r.HandleFunc("/prompt-suggestion", promptSuggest)
-
-	// Serve static files
-	r.PathPrefix("/").Handler(http.FileServer(http.Dir("web")))
+	r.HandleFunc("/deploy", handleSurveyDeploy)
+	r.HandleFunc("/survey", handleSurvey)
+	r.HandleFunc("/", handleIndex)
+	r.HandleFunc("/{surveyID:[a-zA-Z0-9-]+}", handleLucidIndex)
 
 	fmt.Println("Server is running on http://localhost:8080")
 	err = http.ListenAndServe(":8080", r)
