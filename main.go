@@ -178,8 +178,9 @@ type SurveyRequest struct {
 	SurveyMinutes  int          `json:"expected_completion_loi"`
 }
 
-func newSurveyRequest(name string, projectID int, prescreens int, chatTime int) *SurveyRequest {
-	base := *TEMPLATE_LINK
+func newSurveyRequest(name string, projectID int, prescreens int, chatTime int, surveyID uuid.UUID) *SurveyRequest {
+
+	base := *TEMPLATE_LINK.JoinPath(surveyID.String())
 	full := buildExpandedURL(base.String(), TEMPLATE_PARAMS)
 	return &SurveyRequest{
 		BusinessUnitID: 3175,
@@ -1136,8 +1137,8 @@ func addLucidHeaders(req *http.Request) {
 	req.Header.Set("Authorization", os.Getenv("LUCIDHQ_API_KEY"))
 }
 
-func createSurvey(name string, projectID int, prescreens int, chatTime int) (*int, error) {
-	requestParams := newSurveyRequest(name, projectID, prescreens, chatTime)
+func createSurvey(name string, projectID int, prescreens int, chatTime int, surveyID uuid.UUID) (*int, error) {
+	requestParams := newSurveyRequest(name, projectID, prescreens, chatTime, surveyID)
 	data, err := json.Marshal(requestParams)
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal SurveyRequest: %v", err)
@@ -1248,7 +1249,7 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		lucidID, err = createSurvey(surveyName, projectID, prescreens, chatTime)
+		lucidID, err = createSurvey(surveyName, projectID, prescreens, chatTime, surveyID)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
