@@ -1,4 +1,4 @@
-curl --location 'http://localhost:8080/deploy' \
+curl --location 'https://ai-debate.org/deploy' \
      --header 'Content-Type: application/x-www-form-urlencoded' \
      --header 'Authorization: 5C6DA3E4-37B7-48E5-9C51-7C2E9C955DEB' \
      --data-urlencode 'prescreens=3' \

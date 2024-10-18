@@ -13,7 +13,7 @@
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <data sse-swap="keep-alive" hx-swap="none"></data>
-  <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}m"></data>
+  <data id="ticker" hx-target="main" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}m"></data>
   <div>
     Time until survey
     <div id="countdown-timer"></div>
