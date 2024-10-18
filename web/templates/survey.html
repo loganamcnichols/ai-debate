@@ -1,132 +1,136 @@
 {{ define "survey-page-1" }}
-<form hx-post="/survey?response-id={{ .ID }}">
-  <div>
-    <h3>1. Which LLM had the best debate performance?</h3>
-    {{ if eq .WhichLLM "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="which_llm" value="missing">
-    <input type="radio" id="caution-bot" name="which_llm" value="caution-bot"
-    {{ if eq .WhichLLM "caution-bot" }}checked{{ end }}>
-    <label for="caution-bot">Caution bot</label><br>
-    <input type="radio" id="innovation-bot" name="which_llm" value="innovation-bot"
-    {{ if eq .WhichLLM "innovation-bot" }}checked{{ end }}>
-    <label for="innovation-bot">Innovation bot</label><br>
-    <input type="radio" id="not-sure-1" name="which_llm" value="not-sure"
-    {{ if eq .WhichLLM "not-sure" }}checked{{ end }}>
-    <label for="not-sure-1">Not sure</label>
-  </div>
+<main>
+  <form hx-post="/survey?response-id={{ .ID }}">
+    <div class="survey-question">
+      <h3>1. Which LLM had the best debate performance?</h3>
+      {{ if eq .WhichLLM "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="which_llm" value="missing">
+      <input type="radio" id="caution-bot" name="which_llm" value="caution-bot"
+      {{ if eq .WhichLLM "caution-bot" }}checked{{ end }}>
+      <label for="caution-bot">Caution bot</label><br>
+      <input type="radio" id="innovation-bot" name="which_llm" value="innovation-bot"
+      {{ if eq .WhichLLM "innovation-bot" }}checked{{ end }}>
+      <label for="innovation-bot">Innovation bot</label><br>
+      <input type="radio" id="not-sure-1" name="which_llm" value="not-sure"
+      {{ if eq .WhichLLM "not-sure" }}checked{{ end }}>
+      <label for="not-sure-1">Not sure</label>
+    </div>
 
-  <div>
-    <h3>2. Which comes closest to your ideal preference of developing and deploying artificial intelligence?</h3>
-    {{ if eq .AISpeed "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="ai_speed" value="missing">
-    <input type="radio" id="slow-down" name="ai_speed" value="slow-down"
-    {{ if eq .AISpeed "slow-down"}}checked{{ end }}>
-    <label for="slow-down">We should slow down the development and deployment of artificial intelligence</label><br>
-    <input type="radio" id="quickly-develop" name="ai_speed" value="quickly-develop"
-    {{ if eq .AISpeed "quickly-develop" }}checked{{ end }}>
-    <label for="quickly-develop">We should more quickly develop and deploy artificial intelligence</label><br>
-    <input type="radio" id="not-sure-2" name="ai_speed" value="not-sure"
-    {{ if eq .AISpeed "not-sure" }}checked{{ end }}>
-    <label for="not-sure-2">Not sure</label>
-  </div>
-  <input type="hidden" name="page" value="1">
-  <button type="submit" name="navigate" value="next">Next</button>
-</form>
+    <div class="survey-question">
+      <h3>2. Which comes closest to your ideal preference of developing and deploying artificial intelligence?</h3>
+      {{ if eq .AISpeed "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="ai_speed" value="missing">
+      <input type="radio" id="slow-down" name="ai_speed" value="slow-down"
+      {{ if eq .AISpeed "slow-down"}}checked{{ end }}>
+      <label for="slow-down">We should slow down the development and deployment of artificial intelligence</label><br>
+      <input type="radio" id="quickly-develop" name="ai_speed" value="quickly-develop"
+      {{ if eq .AISpeed "quickly-develop" }}checked{{ end }}>
+      <label for="quickly-develop">We should more quickly develop and deploy artificial intelligence</label><br>
+      <input type="radio" id="not-sure-2" name="ai_speed" value="not-sure"
+      {{ if eq .AISpeed "not-sure" }}checked{{ end }}>
+      <label for="not-sure-2">Not sure</label>
+    </div>
+    <input type="hidden" name="page" value="1">
+    <button class="survey-button" type="submit" name="navigate" value="next">Next</button>
+  </form>
+</main>
 {{ end }}
 
 {{ define "survey-page-2" }}
-<form hx-post="/survey?response-id={{ .ID }}">
-  <div>
-    <h3>Do you have a favorable or unfavorable opinion of Elon Musk?</h3>
-    {{ if eq .MuskOpinion "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="musk_opinion" value="missing">
-    <input type="radio" id="musk-very-favorable" name="musk_opinion" value="very-favorable"
-    {{ if eq .MuskOpinion "very-favorable" }}checked{{ end }}>
-    <label for="musk-very-favorable">Very Favorable</label><br>
-    <input type="radio" id="musk-somewhat-favorable" name="musk_opinion" value="somewhat-favorable"
-    {{ if eq .MuskOpinion "somewhat-favorable" }}checked{{ end }}>
-    <label for="musk-somewhat-favorable">Somewhat Favorable</label><br>
-    <input type="radio" id="musk-somewhat-unfavorable" name="musk_opinion" value="somewhat-unfavorable"
-    {{ if eq .MuskOpinion "somewhat-unfavorable" }}checked{{ end }}>
-    <label for="musk-somewhat-unfavorable">Somewhat Unfavorable</label><br>
-    <input type="radio" id="musk-very-unfavorable" name="musk_opinion" value="very-unfavorable"
-    {{ if eq .MuskOpinion "very-unfavorable" }}checked{{ end }}>
-    <label for="musk-very-unfavorable">Very Unfavorable</label><br>
-    <input type="radio" id="musk-not-sure" name="musk_opinion" value="not-sure"
-    {{ if eq .MuskOpinion "not-sure" }}checked{{ end }}>
-    <label for="musk-not-sure">Not Sure/Never heard of</label>
-  </div>
+<main>
+  <form hx-post="/survey?response-id={{ .ID }}">
+    <div class="survey-question">
+      <h3>Do you have a favorable or unfavorable opinion of Elon Musk?</h3>
+      {{ if eq .MuskOpinion "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="musk_opinion" value="missing">
+      <input type="radio" id="musk-very-favorable" name="musk_opinion" value="very-favorable"
+      {{ if eq .MuskOpinion "very-favorable" }}checked{{ end }}>
+      <label for="musk-very-favorable">Very Favorable</label><br>
+      <input type="radio" id="musk-somewhat-favorable" name="musk_opinion" value="somewhat-favorable"
+      {{ if eq .MuskOpinion "somewhat-favorable" }}checked{{ end }}>
+      <label for="musk-somewhat-favorable">Somewhat Favorable</label><br>
+      <input type="radio" id="musk-somewhat-unfavorable" name="musk_opinion" value="somewhat-unfavorable"
+      {{ if eq .MuskOpinion "somewhat-unfavorable" }}checked{{ end }}>
+      <label for="musk-somewhat-unfavorable">Somewhat Unfavorable</label><br>
+      <input type="radio" id="musk-very-unfavorable" name="musk_opinion" value="very-unfavorable"
+      {{ if eq .MuskOpinion "very-unfavorable" }}checked{{ end }}>
+      <label for="musk-very-unfavorable">Very Unfavorable</label><br>
+      <input type="radio" id="musk-not-sure" name="musk_opinion" value="not-sure"
+      {{ if eq .MuskOpinion "not-sure" }}checked{{ end }}>
+      <label for="musk-not-sure">Not Sure/Never heard of</label>
+    </div>
 
-  <div>
-    <h3>Do you have a favorable or unfavorable opinion of Emily Patterson?</h3>
-    {{ if eq .PattersonOpinion "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="patterson_opinion" value="missing">
-    <input type="radio" id="patterson-very-favorable" name="patterson_opinion" value="very-favorable"
-    {{ if eq .PattersonOpinion "very-favorable" }}checked{{ end }}>
-    <label for="patterson-very-favorable">Very Favorable</label><br>
-    <input type="radio" id="patterson-somewhat-favorable" name="patterson_opinion" value="somewhat-favorable"
-    {{ if eq .PattersonOpinion "somewhat-favorable" }}checked{{ end }}>
-    <label for="patterson-somewhat-favorable">Somewhat Favorable</label><br>
-    <input type="radio" id="patterson-somewhat-unfavorable" name="patterson_opinion" value="somewhat-unfavorable"
-   {{ if eq .PattersonOpinion "somewhat-unfavorable" }}checked{{ end }}>
-    <label for="patterson-somewhat-unfavorable">Somewhat Unfavorable</label><br>
-    <input type="radio" id="patterson-very-unfavorable" name="patterson_opinion" value="very-unfavorable"
-   {{ if eq .PattersonOpinion "very-unfavorable" }}checked{{ end }}>
-    <label for="patterson-very-unfavorable">Very Unfavorable</label><br>
-    <input type="radio" id="patterson-not-sure" name="patterson_opinion" value="not-sure"
-   {{ if eq .PattersonOpinion "not-sure" }}checked{{ end }}>
-    <label for="patterson-not-sure">Not Sure/Never heard of</label>
-  </div>
+    <div class="survey-question">
+      <h3>Do you have a favorable or unfavorable opinion of Emily Patterson?</h3>
+      {{ if eq .PattersonOpinion "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="patterson_opinion" value="missing">
+      <input type="radio" id="patterson-very-favorable" name="patterson_opinion" value="very-favorable"
+      {{ if eq .PattersonOpinion "very-favorable" }}checked{{ end }}>
+      <label for="patterson-very-favorable">Very Favorable</label><br>
+      <input type="radio" id="patterson-somewhat-favorable" name="patterson_opinion" value="somewhat-favorable"
+      {{ if eq .PattersonOpinion "somewhat-favorable" }}checked{{ end }}>
+      <label for="patterson-somewhat-favorable">Somewhat Favorable</label><br>
+      <input type="radio" id="patterson-somewhat-unfavorable" name="patterson_opinion" value="somewhat-unfavorable"
+    {{ if eq .PattersonOpinion "somewhat-unfavorable" }}checked{{ end }}>
+      <label for="patterson-somewhat-unfavorable">Somewhat Unfavorable</label><br>
+      <input type="radio" id="patterson-very-unfavorable" name="patterson_opinion" value="very-unfavorable"
+    {{ if eq .PattersonOpinion "very-unfavorable" }}checked{{ end }}>
+      <label for="patterson-very-unfavorable">Very Unfavorable</label><br>
+      <input type="radio" id="patterson-not-sure" name="patterson_opinion" value="not-sure"
+    {{ if eq .PattersonOpinion "not-sure" }}checked{{ end }}>
+      <label for="patterson-not-sure">Not Sure/Never heard of</label>
+    </div>
 
-  <div>
-    <h3>Do you have a favorable or unfavorable opinion of Ben Kensington?</h3>
-    {{ if eq .KensingtonOpinion "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="kensington_opinion" value="missing">
-    <input type="radio" id="kensington-very-favorable" name="kensington_opinion" value="very-favorable"
-    {{ if eq .KensingtonOpinion "very-favorable" }}checked{{ end }}>
-    <label for="kensington-very-favorable">Very Favorable</label><br>
-    <input type="radio" id="kensington-somewhat-favorable" name="kensington_opinion" value="somewhat-favorable"
-    {{ if eq .KensingtonOpinion "somewhat-favorable" }}checked{{ end }}>
-    <label for="kensington-somewhat-favorable">Somewhat Favorable</label><br>
-    <input type="radio" id="kensington-somewhat-unfavorable" name="kensington_opinion" value="somewhat-unfavorable"
-   {{ if eq .KensingtonOpinion "somewhat-unfavorable" }}checked{{ end }} >
-    <label for="kensington-somewhat-unfavorable">Somewhat Unfavorable</label><br>
-    <input type="radio" id="kensington-very-unfavorable" name="kensington_opinion" value="very-unfavorable"
-    {{ if eq .KensingtonOpinion "very-unfavorable" }}checked{{ end }} >
-    <label for="kensington-very-unfavorable">Very Unfavorable</label><br>
-    <input type="radio" id="kensington-not-sure" name="kensington_opinion" value="not-sure"
-    {{ if eq .KensingtonOpinion "not-sure" }}checked{{ end }} >
-    <label for="kensington-not-sure">Not Sure/Never heard of</label>
-  </div>
+    <div class="survey-question">
+      <h3>Do you have a favorable or unfavorable opinion of Ben Kensington?</h3>
+      {{ if eq .KensingtonOpinion "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="kensington_opinion" value="missing">
+      <input type="radio" id="kensington-very-favorable" name="kensington_opinion" value="very-favorable"
+      {{ if eq .KensingtonOpinion "very-favorable" }}checked{{ end }}>
+      <label for="kensington-very-favorable">Very Favorable</label><br>
+      <input type="radio" id="kensington-somewhat-favorable" name="kensington_opinion" value="somewhat-favorable"
+      {{ if eq .KensingtonOpinion "somewhat-favorable" }}checked{{ end }}>
+      <label for="kensington-somewhat-favorable">Somewhat Favorable</label><br>
+      <input type="radio" id="kensington-somewhat-unfavorable" name="kensington_opinion" value="somewhat-unfavorable"
+    {{ if eq .KensingtonOpinion "somewhat-unfavorable" }}checked{{ end }} >
+      <label for="kensington-somewhat-unfavorable">Somewhat Unfavorable</label><br>
+      <input type="radio" id="kensington-very-unfavorable" name="kensington_opinion" value="very-unfavorable"
+      {{ if eq .KensingtonOpinion "very-unfavorable" }}checked{{ end }} >
+      <label for="kensington-very-unfavorable">Very Unfavorable</label><br>
+      <input type="radio" id="kensington-not-sure" name="kensington_opinion" value="not-sure"
+      {{ if eq .KensingtonOpinion "not-sure" }}checked{{ end }} >
+      <label for="kensington-not-sure">Not Sure/Never heard of</label>
+    </div>
 
-  <div>
-    <h3>Would you support or oppose a 100% income and 100% sales tax to fund a program to create potholes in highways?</h3>
-    {{ if eq .Potholes "missing" }}
-      <p class="error">You must select one of the options.</p>
-    {{ end }}
-    <input type="hidden" name="potholes" value="missing">
-    <input type="radio" id="potholes-support" name="potholes" value="support"
-    {{ if eq .Potholes "support" }}checked{{ end }}>
-    <label for="potholes-support">Support this policy</label><br>
-    <input type="radio" id="potholes-oppose" name="potholes" value="oppose"
-    {{ if eq .Potholes "oppose" }}checked{{ end }}>
-    <label for="potholes-oppose">Oppose this policy</label><br>
-    <input type="radio" id="potholes-not-sure" name="potholes" value="not-sure"
-    {{ if eq .Potholes "not-sure" }}checked{{ end }}>
-    <label for="potholes-not-sure">Not sure</label>
-  </div>
-  <input type="hidden" name="page" value="2">
-  <button type="submit" name="navigate" value="previous">Previous</button>
-  <button type="submit" name="navigate" value="next">Complete</button>
-</form>
+    <div class="survey-question">
+      <h3>Would you support or oppose a 100% income and 100% sales tax to fund a program to create potholes in highways?</h3>
+      {{ if eq .Potholes "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="potholes" value="missing">
+      <input type="radio" id="potholes-support" name="potholes" value="support"
+      {{ if eq .Potholes "support" }}checked{{ end }}>
+      <label for="potholes-support">Support this policy</label><br>
+      <input type="radio" id="potholes-oppose" name="potholes" value="oppose"
+      {{ if eq .Potholes "oppose" }}checked{{ end }}>
+      <label for="potholes-oppose">Oppose this policy</label><br>
+      <input type="radio" id="potholes-not-sure" name="potholes" value="not-sure"
+      {{ if eq .Potholes "not-sure" }}checked{{ end }}>
+      <label for="potholes-not-sure">Not sure</label>
+    </div>
+    <input type="hidden" name="page" value="2">
+    <button class="survey-button" type="submit" name="navigate" value="previous">Previous</button>
+    <button class="survey-button" type="submit" name="navigate" value="next">Complete</button>
+  </form>
+</main>
 {{ end }}
