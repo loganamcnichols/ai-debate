@@ -89,6 +89,10 @@ footer
   }
 }
 
+.survey-question {
+  margin-top: 2rem;
+}
+
 .chat-row       
 { 
   display: flex;
@@ -176,6 +180,13 @@ a:visited {
 }
 
 
+.survey-button {
+  padding: 1rem 3rem 1rem 3rem;
+  margin-top: 4rem;
+  border-radius: 80px;
+  color: #DEE4ED;
+  background-color: #253141;
+}
 
 .textbar
 {
