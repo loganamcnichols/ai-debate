@@ -35,7 +35,7 @@ import (
 var TEMPLATE_PARAMS = url.Values{
 	"responseID":   []string{"[%RID%]"},
 	"panelistID":   []string{"[%PID%]"},
-	"supplierID":   []string{"[%PID%]"},
+	"supplierID":   []string{"[%SID%]"},
 	"age":          []string{"[%AGE%]"},
 	"gender":       []string{"[%GENDER%]"},
 	"hispanic":     []string{"[%HISPANIC%]"},
@@ -85,8 +85,9 @@ type QuestionRow struct {
 }
 
 type SurveyResponse struct {
-	ResponseID        *uuid.UUID `db:"id" schema:"id"`
+	ID                *uuid.UUID `db:"id" schema:"id"`
 	SurveyID          *uuid.UUID `db:"survey_id" schema:"survey_id"`
+	ResponseID        string     `db:"response_id" schema:"response_id"`
 	StartTime         *time.Time `db:"start_time" schema:"start_time"`
 	WhichLLM          string     `db:"which_llm" schema:"which_llm"`
 	AISpeed           string     `db:"ai_speed" schema:"ai_speed"`
@@ -98,8 +99,9 @@ type SurveyResponse struct {
 
 func (sq *SurveyResponse) Scan(row *sql.Row) error {
 	return row.Scan(
-		&sq.ResponseID,
+		&sq.ID,
 		&sq.SurveyID,
+		&sq.ResponseID,
 		&sq.StartTime,
 		&sq.WhichLLM,
 		&sq.AISpeed,
@@ -118,7 +120,7 @@ func (sq *SurveyResponse) Update() error {
 		sq.PattersonOpinion,
 		sq.KensingtonOpinion,
 		sq.Potholes,
-		sq.ResponseID,
+		sq.ID,
 	)
 	return err
 }
@@ -132,6 +134,17 @@ func (sq *SurveyResponse) NoneNull() bool {
 		sq.PattersonOpinion != "" &&
 		sq.KensingtonOpinion != "" &&
 		sq.Potholes != "")
+}
+
+func buildExpandedURL(baseURL string, params url.Values) string {
+	queryParts := make([]string, 0, len(params))
+	for key, values := range params {
+		for _, value := range values {
+			queryParts = append(queryParts, key+"="+value)
+		}
+	}
+	queryString := strings.Join(queryParts, "&")
+	return baseURL + "?" + queryString
 }
 
 type ChatMessage struct {
@@ -158,7 +171,7 @@ type SurveyRequest struct {
 	QuantityType   QuantityType `json:"quantity_calc_type"`
 	Status         string       `json:"status"`
 	TestURL        string       `json:"test_url"`
-	SurveyCPIUsed  float32      `json:"survey_cpi_used"`
+	SurveyCPIUSD   float32      `json:"survey_cpi_usd"`
 	StudyType      string       `json:"study_type"`
 	Industry       string       `json:"industry"`
 	CompletionRate float32      `json:"expected_incidence_rate"`
@@ -166,20 +179,20 @@ type SurveyRequest struct {
 }
 
 func newSurveyRequest(name string, projectID int, prescreens int, chatTime int) *SurveyRequest {
-	templateLink := *TEMPLATE_LINK
-	templateLink.RawQuery = TEMPLATE_PARAMS.Encode()
+	base := *TEMPLATE_LINK
+	full := buildExpandedURL(base.String(), TEMPLATE_PARAMS)
 	return &SurveyRequest{
 		BusinessUnitID: 3175,
 		Locale:         "eng_us",
 		Name:           name,
 		ProjectID:      projectID,
 		CollectsPII:    false,
-		LiveURL:        templateLink.String(),
+		LiveURL:        full,
 		Quantity:       prescreens,
 		QuantityType:   PRESCREENS,
 		Status:         "awarded",
-		TestURL:        templateLink.String(),
-		SurveyCPIUsed:  0.5,
+		TestURL:        full,
+		SurveyCPIUSD:   0.5,
 		StudyType:      "adhoc",
 		Industry:       "other",
 		CompletionRate: 1.0,
@@ -215,22 +228,27 @@ func addQualifications(lucidID int) error {
 		{
 			Name:       "GENDER",
 			QuestionID: 43,
+			PreCodes:   []string{},
 		},
 		{
 			Name:       "HISPANIC",
 			QuestionID: 47,
+			PreCodes:   []string{},
 		},
 		{
 			Name:       "ETHNICITY",
 			QuestionID: 113,
+			PreCodes:   []string{},
 		},
 		{
 			Name:       "STANDARD_VOTE",
 			QuestionID: 634,
+			PreCodes:   []string{},
 		},
 		{
 			Name:       "ZIP",
 			QuestionID: 45,
+			PreCodes:   []string{},
 		},
 	}
 	for _, qual := range qualifations {
@@ -238,16 +256,20 @@ func addQualifications(lucidID int) error {
 		if err != nil {
 			return err
 		}
-		target := fmt.Sprintf(QUALIFICATION_ENDPOINT.String(), lucidID)
-		req, err := http.NewRequest("POST", target, bytes.NewBuffer(data))
+		qualificationsEndpoint := *QUALIFICATION_ENDPOINT.JoinPath(fmt.Sprint(lucidID))
+		log.Println(qualificationsEndpoint.String())
+		req, err := http.NewRequest("POST", qualificationsEndpoint.String(), bytes.NewBuffer(data))
 		if err != nil {
 			return fmt.Errorf("unable to create qualification request: %v", err)
 		}
 		addLucidHeaders(req)
 
-		_, err = client.Do(req)
+		res, err := client.Do(req)
 		if err != nil {
 			return fmt.Errorf("unable to add qualification: %v", err)
+		}
+		if res.StatusCode != 200 {
+			log.Println(res.Status)
 		}
 	}
 	return nil
@@ -974,7 +996,7 @@ func generateHash(url, key string) string {
 	return hash
 }
 
-func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID uuid.UUID) {
+func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID string) {
 	if survey.SurveyID == nil {
 		err := tmpls.ExecuteTemplate(w, "non-lucid-complete.html", nil)
 		if err != nil {
@@ -985,12 +1007,12 @@ func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID uui
 		completeURL := *COMPLETE_URL
 		params := completeURL.Query()
 		params.Add("RIS", "10")
-		params.Add("RID", responseID.String())
+		params.Add("RID", responseID)
 		completeURL.RawQuery = params.Encode()
 		hash := generateHash(completeURL.String(), os.Getenv("COMPLETE_KEY"))
 		params.Add("hash", hash)
 		completeURL.RawQuery = params.Encode()
-		w.Header().Set("Hx-Redirect", completeURL.String())
+		w.Header().Set("HX-Redirect", completeURL.String())
 	}
 }
 
@@ -1000,7 +1022,7 @@ func handleSurvey(w http.ResponseWriter, r *http.Request) {
 	decoder := schema.NewDecoder()
 	decoder.IgnoreUnknownKeys(true)
 	decoder.RegisterConverter(uuid.UUID{}, ConvertString)
-	responseID, err := uuid.Parse(r.URL.Query().Get("response-id"))
+	ID, err := uuid.Parse(r.URL.Query().Get("response-id"))
 	if err != nil {
 		log.Printf("unable to parse reponse id %s: %v\n", r.URL.Query().Get("response-id"), err)
 		http.Error(w, "invalid response-id", http.StatusBadRequest)
@@ -1017,7 +1039,7 @@ func handleSurvey(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "expected page parameter as an int", http.StatusBadRequest)
 		return
 	}
-	err = survey.Scan(responseQueryStmt.QueryRow(responseID))
+	err = survey.Scan(responseQueryStmt.QueryRow(ID))
 	if err != nil {
 		log.Printf("error scanning survey questions: %v\n", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -1043,10 +1065,7 @@ func handleSurvey(w http.ResponseWriter, r *http.Request) {
 		} else if navigate == "previous" {
 			page -= 1
 		}
-		if page > pageCount {
-			completeSurvey(w, survey, responseID)
-			return
-		}
+
 		err = decoder.Decode(&survey, r.PostForm)
 		if err != nil {
 			log.Printf("unable to decode form: %v\n", err)
@@ -1061,6 +1080,10 @@ func handleSurvey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		if page > pageCount {
+			completeSurvey(w, survey, survey.ResponseID)
+			return
+		}
 		tmplName := fmt.Sprintf("survey-page-%d", page)
 		err = tmpls.ExecuteTemplate(w, tmplName, survey)
 		if err != nil {
@@ -1114,7 +1137,7 @@ func createProject(name string) (int, error) {
 
 func addLucidHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authentication", os.Getenv("LUCIDHQ_API_KEY"))
+	req.Header.Set("Authorization", os.Getenv("LUCIDHQ_API_KEY"))
 }
 
 func createSurvey(name string, projectID int, prescreens int, chatTime int) (*int, error) {
@@ -1152,8 +1175,8 @@ func createSurvey(name string, projectID int, prescreens int, chatTime int) (*in
 
 func applyBlockedVendorTemplate(surveyID int) error {
 	exchangeTemplateEndpoint := EXCHANGE_TEMPLATE_ENDPOINT.JoinPath(fmt.Sprint(surveyID), fmt.Sprint(BLOCKED_VENDOR_TEMPLATE_ID))
-	endpoint := fmt.Sprintf(exchangeTemplateEndpoint.String(), surveyID, BLOCKED_VENDOR_TEMPLATE_ID)
-	req, err := http.NewRequest("POST", endpoint, nil)
+	log.Println(exchangeTemplateEndpoint.String())
+	req, err := http.NewRequest("POST", exchangeTemplateEndpoint.String(), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create request to %s: %v", EXCHANGE_TEMPLATE_ENDPOINT, err)
 	}
@@ -1167,8 +1190,29 @@ func applyBlockedVendorTemplate(surveyID int) error {
 	return nil
 }
 
+func setToLive(surveyID int) error {
+	surveyEndpoint := *SURVEY_ENDPOINT.JoinPath(fmt.Sprint(surveyID))
+	data, err := json.Marshal(struct {
+		Status string `json:"status"`
+	}{Status: "live"})
+	if err != nil {
+		return fmt.Errorf("unable to marshal json for set to live: %v")
+	}
+	req, err := http.NewRequest("PATCH", surveyEndpoint.String(), bytes.NewBuffer(data))
+	if err != nil {
+		return fmt.Errorf("unable to create request to set to live: %v", err)
+	}
+	addLucidHeaders(req)
+	client := http.Client{}
+	_, err = client.Do(req)
+	if err != nil {
+		return fmt.Errorf("unable to ")
+	}
+	return nil
+}
+
 func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Authentication") != os.Getenv("LUCIDHQ_API_KEY") {
+	if r.Header.Get("Authorization") != os.Getenv("LUCIDHQ_API_KEY") {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
@@ -1199,7 +1243,7 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	surveyName := fmt.Sprintf("AI Debate %v", time.Now())
+	surveyName := fmt.Sprintf("AI Debate %s", time.Now().Format(time.DateTime))
 	var lucidID *int
 	if lucidLaunch {
 		projectID, err := createProject(surveyName)
@@ -1229,6 +1273,13 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
+
+		err = setToLive(*lucidID)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	_, err = surveyInsertStmt.Exec(surveyID, lucidID, chatTime)
@@ -1245,36 +1296,16 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 	var err error
 	vars := mux.Vars(r)
 	params := r.URL.Query()
-	var responseID, panelistID, supplierID, surveyID *uuid.UUID
-	parsedID, err := uuid.Parse(params.Get("responseID"))
-	if err != nil {
-		log.Printf("error parsing responseID %s: %v\n", params.Get("responseID"), err)
-		newUUID, err := uuid.NewUUID()
-		if err != nil {
-			log.Printf("error creating new uuid: %v\n", err)
-			return
-		}
-		responseID = &newUUID
-	} else {
-		responseID = &parsedID
-	}
-	parsedID, err = uuid.Parse(params.Get("panelistID"))
-	if err != nil {
-		log.Printf("error parsing panelistID %s: %v\n", params.Get("panelistID"), err)
-	} else {
-		panelistID = &parsedID
-	}
-	parsedID, err = uuid.Parse(params.Get("supplierID"))
-	if err != nil {
-		log.Printf("error parsing supplierID %s: %v\n", params.Get("supplierID"), err)
-	} else {
-		supplierID = &parsedID
-	}
-	parsedID, err = uuid.Parse(vars["surveyID"])
+	var responseID, panelistID, supplierID string
+	var surveyID *uuid.UUID
+	responseID = params.Get("responseID")
+	panelistID = params.Get("panelistID")
+	supplierID = params.Get("supplierID")
+	parsedUUID, err := uuid.Parse(vars["surveyID"])
 	if err != nil {
 		log.Printf("error parsing surveyID %s: %v\n", vars["surveyID"], err)
 	} else {
-		surveyID = &parsedID
+		surveyID = &parsedUUID
 	}
 
 	ageParam := params.Get("age")
@@ -1314,7 +1345,8 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = lucidResponseInsertStmt.Exec(responseID, surveyID, panelistID, supplierID, age, zip, gender, hispanic, ethnicity, standardVote, innovateFirst)
+	var id uuid.UUID
+	err = lucidResponseInsertStmt.QueryRow(responseID, surveyID, panelistID, supplierID, age, zip, gender, hispanic, ethnicity, standardVote, innovateFirst).Scan(&id)
 	if err != nil {
 		log.Printf("error executing lucidResponseInsertStmt: %v\n", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -1327,7 +1359,7 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 		ChatTime     int
 	}{
 		QuestionRows: []ChatMessage{},
-		ResponseID:   responseID.String(),
+		ResponseID:   id.String(),
 		ChatTime:     chatTime,
 	}
 
@@ -1380,7 +1412,7 @@ func initURLs() {
 	if err != nil {
 		log.Printf("unable to parse 'https://api.samplicio.us/demand/v2-beta/projects'")
 	}
-	QUALIFICATION_ENDPOINT, err = url.Parse("https://api.samplicio.us/Demand/v1/SurveyQualification/Create")
+	QUALIFICATION_ENDPOINT, err = url.Parse("https://api.samplicio.us/Demand/v1/SurveyQualifications/Create")
 	if err != nil {
 		log.Printf("unable to parse 'https://api.samplicio.us/Demand/v1/SurveyQualification/Create'")
 	}
@@ -1464,6 +1496,7 @@ func main() {
 	responseQueryStmt, err = db.Prepare(`SELECT
 																			 id,
 																			 survey_id,
+																			 response_id,
 																			 start_time,
 	                                     which_llm, 
 	                                     ai_speed, 
@@ -1505,8 +1538,9 @@ func main() {
 		log.Fatalf("Failed to prepare responseInsertStmt %v", err)
 	}
 
-	lucidResponseInsertStmt, err = db.Prepare(`INSERT INTO response (id, survey_id, panelist_id, supplier_id, age, zip, gender, hispanic, ethnicity, standard_vote, innovate_first)
-	                                                          VALUES ($1, $2,       $3,         $4,         $5,  $6,  $7,     $8,       $9,        $10,           $11)`)
+	lucidResponseInsertStmt, err = db.Prepare(`INSERT INTO response (response_id, survey_id, panelist_id, supplier_id, age, zip, gender, hispanic, ethnicity, standard_vote, innovate_first)
+	                                                          VALUES ($1, $2,       $3,         $4,         $5,  $6,  $7,     $8,       $9,        $10,           $11)
+																														RETURNING id`)
 	if err != nil {
 		log.Fatalf("Failed to prepare lucidResponseInsertStmt: %v", err)
 	}

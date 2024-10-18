@@ -1,5 +1,5 @@
 {{ define "survey-page-1" }}
-<form hx-post="/survey?response-id={{ .ResponseID }}">
+<form hx-post="/survey?response-id={{ .ID }}">
   <div>
     <h3>1. Which LLM had the best debate performance?</h3>
     {{ if eq .WhichLLM "missing" }}
@@ -39,7 +39,7 @@
 {{ end }}
 
 {{ define "survey-page-2" }}
-<form hx-post="/survey?response-id={{ .ResponseID }}">
+<form hx-post="/survey?response-id={{ .ID }}">
   <div>
     <h3>Do you have a favorable or unfavorable opinion of Elon Musk?</h3>
     {{ if eq .MuskOpinion "missing" }}
