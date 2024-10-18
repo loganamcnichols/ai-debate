@@ -18,11 +18,9 @@
     Time until survey
     <div id="countdown-timer"></div>
   </div>
-  <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
-                            else if (event.detail.type === 'chat-msg') 
-                                 this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
-                            else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });"
-                        _="on load me.scrollTo({ top: me.scrollHeight,   behavior: 'smooth' })">
+  <main hx-on::sse-message="if (event.detail.type === 'chat-msg') 
+                                     setTimeout(() => { this.scrollTo({ top: this.scrollHeight, behavior: 'smooth' });}, 10); 
+                            else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });">
     <div id="intro-msgs" sse-swap="intro-msg" hx-swap="beforeend">
     </div>
     <div id="chat-msgs"  sse-swap="chat-msg, inactive" hx-swap="beforeend">
