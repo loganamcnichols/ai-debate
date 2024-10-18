@@ -257,19 +257,15 @@ func addQualifications(lucidID int) error {
 			return err
 		}
 		qualificationsEndpoint := *QUALIFICATION_ENDPOINT.JoinPath(fmt.Sprint(lucidID))
-		log.Println(qualificationsEndpoint.String())
 		req, err := http.NewRequest("POST", qualificationsEndpoint.String(), bytes.NewBuffer(data))
 		if err != nil {
 			return fmt.Errorf("unable to create qualification request: %v", err)
 		}
 		addLucidHeaders(req)
 
-		res, err := client.Do(req)
+		_, err = client.Do(req)
 		if err != nil {
 			return fmt.Errorf("unable to add qualification: %v", err)
-		}
-		if res.StatusCode != 200 {
-			log.Println(res.Status)
 		}
 	}
 	return nil
@@ -1175,7 +1171,6 @@ func createSurvey(name string, projectID int, prescreens int, chatTime int) (*in
 
 func applyBlockedVendorTemplate(surveyID int) error {
 	exchangeTemplateEndpoint := EXCHANGE_TEMPLATE_ENDPOINT.JoinPath(fmt.Sprint(surveyID), fmt.Sprint(BLOCKED_VENDOR_TEMPLATE_ID))
-	log.Println(exchangeTemplateEndpoint.String())
 	req, err := http.NewRequest("POST", exchangeTemplateEndpoint.String(), nil)
 	if err != nil {
 		return fmt.Errorf("unable to create request to %s: %v", EXCHANGE_TEMPLATE_ENDPOINT, err)
