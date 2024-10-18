@@ -15,8 +15,9 @@ CREATE TABLE survey (
 CREATE TABLE response (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   survey_id UUID REFERENCES survey(id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  panelist_id UUID,
-  supplier_id UUID,
+  response_id TEXT DEFAULT '',
+  panelist_id TEXT DEFAULT '',
+  supplier_id TEXT DEFAULT '',
   age INT,
   zip TEXT DEFAULT '',
   gender TEXT  DEFAULT '',
