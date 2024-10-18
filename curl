@@ -1,0 +1,5 @@
+curl --location 'http://localhost:8080/deploy' \
+     --header 'Content-Type: application/x-www-form-urlencoded' \
+     --data-urlencode 'prescreens=3' \
+     --data-urlencode 'chatTime=2' \
+     --data-urlencode 'lucidLaunch="true"'

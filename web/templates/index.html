@@ -13,7 +13,11 @@
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <data sse-swap="keep-alive" hx-swap="none"></data>
-  <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}s"></data>
+  <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}m"></data>
+  <div>
+    Time until survey
+    <div id="countdown-timer"></div>
+  </div>
   <main hx-on::sse-message="if (event.detail.type === 'inactive') sendMessageToParent('inactive', '');
                             else if (event.detail.type === 'chat-msg') 
                                  this.scrollTo({ top: this.scrollHeight, behavior: 'smooth'});
@@ -77,38 +81,33 @@
     {{ end }}
   </footer>
 <script>
-  let innovationFirst = true;
-  const allowedOrigins = [
-    'http://localhost:5173',
-    'https://surveyor.ink',
-    "https://dev.surveyor.ink",
-    'https://www.surveyor.ink'
-  ];
-  function isInIframe() {
-    try {
-      return window.self !== window.top;
-    } catch (e) {
-      return true;
-    }
-  }
+  // Insert the JavaScript code from the artifact here
+  function startCountdown(duration) {
+    let timer = duration;
+    const countdownElement = document.getElementById('countdown-timer');
 
-  // Function to send message to parent
-  function sendMessageToParent(type, content) {
-    if (!isInIframe()) {
-      return;
-    }
-    allowedOrigins.forEach(origin => {
-      try {
-        window.parent.postMessage({ type, content }, origin);
-      } catch (e) {
-        void(0);
+    const updateTimer = () => {
+      const minutes = Math.floor(timer / 60);
+      let seconds = timer % 60;
+
+      seconds = seconds < 10 ? "0" + seconds : seconds;
+      countdownElement.textContent = minutes + ":" + seconds;
+
+      if (--timer < 0) {
+        countdownElement.textContent = "Time's up!";
+        clearInterval(interval);
       }
-    });
+    };
 
-    function openingArguments() {
-
-    } 
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
   }
+
+  // Start the countdown when the page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    const chatTime = parseInt("{{ .ChatTime }}"); // Get the ChatTime value
+    startCountdown(60 * chatTime);
+  });
 </script>
 </body>
 </html>
