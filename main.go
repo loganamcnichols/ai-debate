@@ -47,6 +47,7 @@ var TEMPLATE_PARAMS = url.Values{
 var (
 	innovationFirstStmt     *sql.Stmt
 	surveyInsertStmt        *sql.Stmt
+	chatTimeQueryStmt       *sql.Stmt
 	responseQueryStmt       *sql.Stmt
 	responseUpdateStmt      *sql.Stmt
 	chatHistoryStmt         *sql.Stmt
@@ -941,10 +942,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			_, err := insertChatStmt.Exec(questionID, responseID, userMsg, firstAnswer, secondAnswer)
-			log.Println("update complete")
 			if err != nil {
 				log.Printf("error executing updateChatStmt: %v", err)
-				http.Error(w, "internal server error", http.StatusInternalServerError)
 				return
 			}
 		}
@@ -1118,15 +1117,15 @@ func addLucidHeaders(req *http.Request) {
 	req.Header.Set("Authentication", os.Getenv("LUCIDHQ_API_KEY"))
 }
 
-func createSurvey(name string, projectID int, prescreens int, chatTime int) (int, error) {
+func createSurvey(name string, projectID int, prescreens int, chatTime int) (*int, error) {
 	requestParams := newSurveyRequest(name, projectID, prescreens, chatTime)
 	data, err := json.Marshal(requestParams)
 	if err != nil {
-		return 0, fmt.Errorf("unable to marshal SurveyRequest: %v", err)
+		return nil, fmt.Errorf("unable to marshal SurveyRequest: %v", err)
 	}
 	req, err := http.NewRequest("POST", SURVEY_ENDPOINT.String(), bytes.NewBuffer(data))
 	if err != nil {
-		return 0, fmt.Errorf("unable to create new survey request: %v", err)
+		return nil, fmt.Errorf("unable to create new survey request: %v", err)
 	}
 
 	addLucidHeaders(req)
@@ -1134,7 +1133,7 @@ func createSurvey(name string, projectID int, prescreens int, chatTime int) (int
 	client := http.Client{}
 	res, err := client.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("failed to create new survey: %v", err)
+		return nil, fmt.Errorf("failed to create new survey: %v", err)
 	}
 	var respTmpl struct {
 		ID  int       `json:"id"`
@@ -1143,12 +1142,12 @@ func createSurvey(name string, projectID int, prescreens int, chatTime int) (int
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return 0, fmt.Errorf("unable to read response boody: %v", err)
+		return nil, fmt.Errorf("unable to read response boody: %v", err)
 	}
 
 	err = json.Unmarshal(body, &respTmpl)
 
-	return respTmpl.ID, err
+	return &respTmpl.ID, err
 }
 
 func applyBlockedVendorTemplate(surveyID int) error {
@@ -1183,9 +1182,11 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 
 	chatTimeParam := r.FormValue("chatTime")
 	prescreenParam := r.FormValue("prescreens")
+	lucidLaunchParam := r.FormValue("lucidLaunch")
 
 	chatTime, chatTimeErr := strconv.Atoi(chatTimeParam)
 	prescreens, prescreensErr := strconv.Atoi(prescreenParam)
+	lucidLaunch := lucidLaunchParam == "true"
 
 	if chatTimeErr != nil {
 		log.Printf("received invalid chatTime parameter %s: %v", chatTimeParam, chatTimeErr)
@@ -1199,32 +1200,35 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	surveyName := fmt.Sprintf("AI Debate %v", time.Now())
-	projectID, err := createProject(surveyName)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+	var lucidID *int
+	if lucidLaunch {
+		projectID, err := createProject(surveyName)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	lucidID, err := createSurvey(surveyName, projectID, prescreens, chatTime)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+		lucidID, err = createSurvey(surveyName, projectID, prescreens, chatTime)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	err = addQualifications(lucidID)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+		err = addQualifications(*lucidID)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 
-	err = applyBlockedVendorTemplate(lucidID)
-	if err != nil {
-		log.Println(err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		err = applyBlockedVendorTemplate(*lucidID)
+		if err != nil {
+			log.Println(err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	_, err = surveyInsertStmt.Exec(surveyID, lucidID, chatTime)
@@ -1233,41 +1237,65 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
+	fmt.Fprintf(w, "https://ai-debate.org/%s", surveyID.String())
 }
 
 func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Received request params: %s", r.URL.RawQuery)
 	var err error
 	vars := mux.Vars(r)
 	params := r.URL.Query()
-	surveyID, surveyErr := uuid.Parse(vars["surveyID"])
-	var responseID, panelistID, supplierID uuid.UUID
-	var responseErr, panelistErr, supplierErr error
-	responseID, responseErr = uuid.Parse(params.Get("responseID"))
-	panelistID, panelistErr = uuid.Parse(params.Get("panelistID"))
-	supplierID, supplierErr = uuid.Parse(params.Get("supplierID"))
-
-	if surveyErr != nil {
-		log.Printf("error parsing surveyID %s: %v\n", vars["surveyID"], err)
-	}
-	if responseErr != nil {
+	var responseID, panelistID, supplierID, surveyID *uuid.UUID
+	parsedID, err := uuid.Parse(params.Get("responseID"))
+	if err != nil {
 		log.Printf("error parsing responseID %s: %v\n", params.Get("responseID"), err)
+		newUUID, err := uuid.NewUUID()
+		if err != nil {
+			log.Printf("error creating new uuid: %v\n", err)
+			return
+		}
+		responseID = &newUUID
+	} else {
+		responseID = &parsedID
 	}
-	if panelistErr != nil {
+	parsedID, err = uuid.Parse(params.Get("panelistID"))
+	if err != nil {
 		log.Printf("error parsing panelistID %s: %v\n", params.Get("panelistID"), err)
+	} else {
+		panelistID = &parsedID
 	}
-	if supplierErr != nil {
+	parsedID, err = uuid.Parse(params.Get("supplierID"))
+	if err != nil {
 		log.Printf("error parsing supplierID %s: %v\n", params.Get("supplierID"), err)
+	} else {
+		supplierID = &parsedID
+	}
+	parsedID, err = uuid.Parse(vars["surveyID"])
+	if err != nil {
+		log.Printf("error parsing surveyID %s: %v\n", vars["surveyID"], err)
+	} else {
+		surveyID = &parsedID
 	}
 
-	age := params.Get("age")
+	ageParam := params.Get("age")
+	var age int
+	if ageParam == "" {
+		age = 0
+	} else {
+		age, err = strconv.Atoi(ageParam)
+		if err != nil {
+			log.Printf("error parsing page param %s: %v", ageParam, err)
+			http.Error(w, "error parsing age param: %v\n", http.StatusBadRequest)
+			return
+		}
+	}
 	zip := params.Get("zip")
 	gender := params.Get("gender")
 	hispanic := params.Get("hispanic")
 	ethnicity := params.Get("ethnicity")
 	standardVote := params.Get("standardVote")
 
-	if age == "" ||
+	if ageParam == "" ||
 		zip == "" ||
 		gender == "" ||
 		hispanic == "" ||
@@ -1277,6 +1305,14 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	innovateFirst := (rand.Float32() > 0.5)
+
+	var chatTime int
+	err = chatTimeQueryStmt.QueryRow(&surveyID).Scan(&chatTime)
+	if err != nil {
+		log.Printf("error executing chatTime query: %v\n", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
 
 	_, err = lucidResponseInsertStmt.Exec(responseID, surveyID, panelistID, supplierID, age, zip, gender, hispanic, ethnicity, standardVote, innovateFirst)
 	if err != nil {
@@ -1288,9 +1324,11 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 	var data = struct {
 		QuestionRows []ChatMessage
 		ResponseID   string
+		ChatTime     int
 	}{
 		QuestionRows: []ChatMessage{},
 		ResponseID:   responseID.String(),
+		ChatTime:     chatTime,
 	}
 
 	err = tmpls.ExecuteTemplate(w, "index.html", data)
@@ -1416,6 +1454,11 @@ func main() {
 	surveyInsertStmt, err = db.Prepare(`INSERT INTO survey (id, lucid_id, chat_time) VALUES ($1, $2, $3);`)
 	if err != nil {
 		log.Fatalf("Failed to prepare surveyInsertStmt: %v\n", err)
+	}
+
+	chatTimeQueryStmt, err = db.Prepare("SELECT chat_time FROM survey WHERE id = $1;")
+	if err != nil {
+		log.Fatalf("Failed to prepare chatTimeQueryStmt: %v\n", err)
 	}
 
 	responseQueryStmt, err = db.Prepare(`SELECT
