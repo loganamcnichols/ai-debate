@@ -10,3 +10,5 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/sashabaranov/go-openai v1.31.0
 )
+
+require github.com/gorilla/websocket v1.5.3

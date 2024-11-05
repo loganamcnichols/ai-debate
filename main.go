@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
+	"github.com/gorilla/websocket"
 	"github.com/sashabaranov/go-openai"
 
 	"github.com/joho/godotenv"
@@ -44,6 +45,13 @@ var TEMPLATE_PARAMS = url.Values{
 	"zip":          []string{"[%ZIP%]"},
 }
 
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+var dialer = websocket.Dialer{}
+
 var (
 	innovationFirstStmt     *sql.Stmt
 	surveyInsertStmt        *sql.Stmt
@@ -59,6 +67,7 @@ var (
 )
 
 var (
+	REALTIME_ENDPOINT          *url.URL
 	TEMPLATE_LINK              *url.URL
 	SURVEY_ENDPOINT            *url.URL
 	PROJECT_ENDPOINT           *url.URL
@@ -68,6 +77,155 @@ var (
 	SURVEYOR_CLIENT_ID         = 9676
 	BLOCKED_VENDOR_TEMPLATE_ID = 1839
 )
+
+type RealtimeAudioFormat string
+
+const (
+	PCM16     RealtimeAudioFormat = "pcm16"
+	G711_ULAW RealtimeAudioFormat = "g711_ulaw"
+	G711_ALAW RealtimeAudioFormat = "g711_alaw"
+)
+
+type RealtimeVoice string
+
+const (
+	ALLOY  RealtimeVoice = "alloy"
+	ASH    RealtimeVoice = "ash"
+	BALLAD RealtimeVoice = "ballad"
+	CORAL  RealtimeVoice = "coral"
+	ECHO   RealtimeVoice = "echo"
+	SHIMER RealtimeVoice = "shimer"
+	VERSE  RealtimeVoice = "verse"
+)
+
+var RealtimeVoices = []RealtimeVoice{
+	ALLOY, ASH, BALLAD, CORAL, ECHO, SHIMER, VERSE,
+}
+
+type TurnDetectionType string
+
+const (
+	SERVER_VAD TurnDetectionType = "server_vad"
+)
+
+type ModelSpec struct {
+	Model string `json:"model"`
+}
+
+type TurnDetection struct {
+	Type              TurnDetectionType `json:"type"`
+	Threshold         float32           `json:"threshold"`
+	PrefixPaddingMS   int               `json:"prefix_padding_ms"`
+	SilenceDurationMS int               `json:"silence_duration_ms"`
+}
+
+type RealtimeTool struct {
+	Type        string      `json:"type"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	Parameters  interface{} `json:"parameters"`
+}
+
+type RealtimeClientEventType string
+
+const (
+	SESSION_UPDATE             RealtimeClientEventType = "session.update"
+	INPUT_AUDIO_BUFFER_APPEND  RealtimeClientEventType = "input_audio_buffer.append"
+	INPUT_AUDIO_BUFFER_COMMIT  RealtimeClientEventType = "input_aduio_buffer.commit"
+	INPUT_AUDIO_BUFFER_CLEAR   RealtimeClientEventType = "input_audio_buffer.clear"
+	CONVERSATION_ITEM_CREATE   RealtimeClientEventType = "conversation.item.create"
+	CONVERSATION_ITEM_TRUNCATE RealtimeClientEventType = "conversation.item.truncate"
+	CONVERSATION_ITEM_DELETE   RealtimeClientEventType = "conversation.item.delete"
+	RESPONSE_CREATE            RealtimeClientEventType = "response.create"
+	RESPONSE_CANCEL            RealtimeClientEventType = "response.cancel"
+)
+
+type RealtimeServerEventType string
+
+const (
+	REALTIME_ERROR                    RealtimeServerEventType = "error"
+	SESSION_CREATED                   RealtimeServerEventType = "session.created"
+	SESSION_UPDATED                   RealtimeServerEventType = "session.updated"
+	CONVERSATION_CREATED              RealtimeServerEventType = "conversation.created"
+	CONVERSATION_ITEM_CREATED         RealtimeServerEventType = "conversation.item.created"
+	CONVERSATION_ITEM_TRUNCATED       RealtimeServerEventType = "conversation.item.truncated"
+	CONVERSATION_ITEM_DELETED         RealtimeServerEventType = "conversation.item.deleted"
+	INPUT_AUDIO_BUFFER_COMMITED       RealtimeServerEventType = "input_audio_buffer.committed"
+	INPUT_AUDIO_BUFFER_CLEARED        RealtimeServerEventType = "input_audio_buffer.cleared"
+	INPUT_AUDIO_BUFFER_SPEECH_STARTED RealtimeServerEventType = "input_audio_buffer.speech_started"
+	INPUT_AUDIO_BUFFER_SPEECH_STOPPED RealtimeServerEventType = "input_audio_buffer.speech_stopped"
+	RESPONSE_CREATED                  RealtimeServerEventType = "response.created"
+	RESPONSE_DONE                     RealtimeServerEventType = "response.done"
+	RESPONSE_OUTPUT_ITEM_ADDED        RealtimeServerEventType = "response.output_item.added"
+	RESPONSE_OUTPUT_ITEM_DONE         RealtimeServerEventType = "response.output_item.done"
+	RESPONSE_CONTENT_PART_ADDED       RealtimeServerEventType = "response.content_part.added"
+	RESPONSE_CONTENT_PART_DONE        RealtimeServerEventType = "response.content_part.done"
+	RESPONSE_TEXT_DELTA               RealtimeServerEventType = "response.text.delta"
+	RESPONSE_TEXT_DONE                RealtimeServerEventType = "response.text.done"
+	RESPONSE_AUDIO_TRANSCRIPT_DELTA   RealtimeServerEventType = "response.audio_transcript.delta"
+	RESPONSE_AUDIO_TRANSCRIPT_DONE    RealtimeServerEventType = "response.audio_transcript.done"
+	RESPONSE_AUDIO_DELTA              RealtimeServerEventType = "response.audio.delta"
+	RESPONSE_AUDIO_DONE               RealtimeServerEventType = "response.audio.done"
+)
+
+type RealtimeSession struct {
+	Modalities              []string            `json:"modalities"`
+	Instructions            string              `json:"instructions"`
+	Voice                   RealtimeVoice       `json:"voice"`
+	InputAudioFormat        RealtimeAudioFormat `json:"input_audio_format"`
+	OutputAudioFormat       RealtimeAudioFormat `json:"output_audio_format"`
+	InputAudioTranscription ModelSpec           `json:"input_audio_transcription"`
+	TurnDetection           TurnDetection       `json:"turn_detection"`
+	Tools                   []RealtimeTool      `json:"tools"`
+	ToolChoice              string              `json:"tool_choice"`
+	Temperature             float32             `json:"temperature"`
+	MaxResponseOutputTokens interface{}         `json:"max_response_output_tokens"`
+}
+
+type RealtimeServerEvent struct {
+	EventID string                  `json:"event_id"`
+	Type    RealtimeServerEventType `json:"type"`
+}
+
+type ResponseAudioDelta struct {
+	EventID string                  `json:"event_id"`
+	Type    RealtimeServerEventType `json:"type"`
+	Delta   string                  `json:"delta"`
+}
+
+type RealtimeServerError struct {
+	Type    string `json:"type"`
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Param   string `json:"param"`
+}
+
+type RealtimeServerEventError struct {
+	EventID string                  `json:"event_id"`
+	Type    RealtimeServerEventType `json:"type"`
+	Error   RealtimeServerError
+}
+
+func (r ResponseAudioDelta) GetType() RealtimeServerEventType {
+	return r.Type
+}
+
+type SessionUpdate struct {
+	Type    RealtimeClientEventType `json:"type"`
+	EventID string                  `json:"event_id"`
+	Session RealtimeSession         `json:"session"`
+}
+
+type InputAudioBufferAppend struct {
+	Type    RealtimeClientEventType `json:"type"`
+	EventID string                  `json:"event_id"`
+	Audio   string                  `json:"audio"`
+}
+
+type InputAudioBufferCommit struct {
+	Type    RealtimeClientEventType `json:"type"`
+	EventID string                  `json:"event_id"`
+}
 
 type Qualification struct {
 	Name       string
@@ -1192,7 +1350,7 @@ func setToLive(surveyID int) error {
 		Status string `json:"status"`
 	}{Status: "live"})
 	if err != nil {
-		return fmt.Errorf("unable to marshal json for set to live: %v")
+		return fmt.Errorf("unable to marshal json for set to live: %v", err)
 	}
 	req, err := http.NewRequest("PATCH", surveyEndpoint.String(), bytes.NewBuffer(data))
 	if err != nil {
@@ -1420,6 +1578,125 @@ func initURLs() {
 	if err != nil {
 		log.Printf("unable to parse 'https://www.samplicio.us/router/ClientCallBack.aspx'")
 	}
+
+	REALTIME_ENDPOINT, err = url.Parse("wss://api.openai.com/v1/realtime")
+	if err != nil {
+		log.Fatal("unable to parse wss://api.openai.com/v1/realtime")
+	}
+
+	realtimeParams := url.Values{
+		"model": []string{"gpt-4o-realtime-preview-2024-10-01"},
+	}
+
+	REALTIME_ENDPOINT.RawQuery = realtimeParams.Encode()
+}
+
+func handleWS(w http.ResponseWriter, r *http.Request) {
+	connClient, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("unable to upgrade to websocket: %v\n", err)
+		return
+	}
+
+	defer connClient.Close()
+
+	header := http.Header{
+		"Authorization": []string{fmt.Sprintf("Bearer %s", os.Getenv("OPENAI_API_KEY"))},
+		"OpenAI-Beta":   []string{"realtime=v1"},
+	}
+
+	connServer, _, err := dialer.Dial(REALTIME_ENDPOINT.String(), header)
+	if err != nil {
+		log.Printf("unable to establish websocket connection to the realtime api: %v\n", err)
+		return
+	}
+
+	defer connServer.Close()
+
+	clientID := uuid.Must(uuid.NewUUID())
+
+	// randVoiceIdx := rand.Intn(len(RealtimeVoices))
+	// randVoice := RealtimeVoices[randVoiceIdx]
+
+	// err = connServer.WriteJSON(SessionUpdate{
+	// 	EventID: clientID.String(),
+	// 	Type:    SESSION_UPDATE,
+	// 	Session: RealtimeSession{
+	// 		Voice:                   randVoice,
+	// 		Modalities:              []string{"text", "audio"},
+	// 		Tools:                   []RealtimeTool{},
+	// 		MaxResponseOutputTokens: "inf",
+	// 	},
+	// })
+	// if err != nil {
+	// 	log.Printf("error updating session state: %v\n", err)
+	// 	return
+	// }
+
+	go func() {
+		for {
+			_, data, err := connServer.ReadMessage()
+			if err != nil {
+				log.Printf("unable to read message from realtime api: %v", err)
+				return
+			}
+			var event RealtimeServerEvent
+			err = json.Unmarshal(data, &event)
+			if err != nil {
+				log.Printf("cannot unmarshal data into realtime server event: %v\n", err)
+				return
+			}
+			log.Println("event from OpenAI:", event.Type)
+			switch event.Type {
+			case REALTIME_ERROR:
+				var eventError RealtimeServerEventError
+				err = json.Unmarshal(data, &eventError)
+				if err != nil {
+					log.Printf("unable to unmarshal realtime error type: %v\n", err)
+					return
+				}
+			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
+			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
+				log.Println("speech stopped")
+			case RESPONSE_AUDIO_DELTA:
+				var newAudio ResponseAudioDelta
+				err = json.Unmarshal(data, &newAudio)
+				if err != nil {
+					log.Printf("cannot unmashal data to ResponseAudioDelta: %v\n", err)
+					return
+				}
+				err = connClient.WriteMessage(websocket.TextMessage, []byte(newAudio.Delta))
+				if err != nil {
+					log.Printf("error writing response back to the client: %v\n", err)
+					return
+				}
+			}
+		}
+	}()
+
+	for {
+		mt, message, err := connClient.ReadMessage()
+		if err != nil {
+			log.Printf("unable to read message from websocket: %v\n", err)
+			return
+		}
+
+		switch mt {
+		case websocket.CloseMessage:
+			return
+		case websocket.TextMessage:
+			log.Println("input audio buffer append")
+			err = connServer.WriteJSON(InputAudioBufferAppend{
+				EventID: clientID.String(),
+				Type:    INPUT_AUDIO_BUFFER_APPEND,
+				Audio:   string(message),
+			})
+			if err != nil {
+				log.Printf("unable to append to audio buffer: %v\n", err)
+				return
+			}
+		}
+	}
 }
 
 func main() {
@@ -1556,13 +1833,15 @@ func main() {
 	r := mux.NewRouter()
 
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+	r.HandleFunc("/", handleIndex)
 	r.HandleFunc("/submit-question", submitQuestion)
 	r.HandleFunc("/submit-suggestion", suggestionSubmit)
 	r.HandleFunc("/chat", streamResponse)
 	r.HandleFunc("/prompt-suggestion", promptSuggest)
 	r.HandleFunc("/deploy", handleSurveyDeploy)
 	r.HandleFunc("/survey", handleSurvey)
-	r.HandleFunc("/", handleIndex)
+	r.HandleFunc("/ws", handleWS)
 	r.HandleFunc("/{surveyID:[a-zA-Z0-9-]+}", handleLucidIndex)
 
 	fmt.Println("Server is running on http://localhost:8080")

@@ -19,22 +19,6 @@
     <div id="countdown-timer">
     </div>
   </div>
-  <main hx-on::sse-message="if (event.detail.type === 'chat-msg') 
-                                     setTimeout(() => { this.scrollTo({ top: this.scrollHeight, behavior: 'smooth' });}, 10); 
-                            else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });">
-    <div id="intro-msgs" sse-swap="intro-msg" hx-swap="beforeend">
-    </div>
-    <div id="chat-msgs"  sse-swap="chat-msg, inactive" hx-swap="beforeend">
-    {{ range $i, $val := .QuestionRows }}
-    {{ block "chat-msg" . }}
-      <div class="msg" sse-swap="{{ .QuestionID }}-{{ .Role }}-delete" hx-swap="delete">
-        <div class="msg-content" sse-swap="{{ .QuestionID }}-{{ .Role }}"
-                          hx-swap="innerHTML">{{ .Content }}</div>
-      </div>
-    {{ end }}
-    {{ end }}
-    </div>
-  </main>
   <footer sse-swap="active-form" hx-swap="innerHTML" hx-target="this">
   {{ if gt (len .QuestionRows) 0 }}
   {{ block "active-form" .ResponseID }}
@@ -80,6 +64,8 @@
     {{ end }}
   </footer>
 <script>
+
+
   // Insert the JavaScript code from the artifact here
   function startCountdown(duration) {
     let timer = duration;
@@ -106,6 +92,174 @@
   document.addEventListener('DOMContentLoaded', () => {
     const chatTime = parseInt("{{ .ChatTime }}"); // Get the ChatTime value
     startCountdown(60 * chatTime);
+  });
+
+  const socket = new WebSocket("/ws");
+  const SERVER_SAMPLE_RATE = 24000;  // Server's sample rate
+  let audioContext;
+  let gainNode;
+
+  // Audio queue management
+  const audioQueue = [];
+  let isPlaying = false;
+  let nextPlayTime = 0;
+
+  // Linear interpolation for resampling
+  function resample(audioData, fromSampleRate, toSampleRate) {
+    const scale = fromSampleRate / toSampleRate;
+    const newLength = Math.round(audioData.length / scale);
+    const result = new Float32Array(newLength);
+    
+    for (let i = 0; i < newLength; i++) {
+      const idx = i * scale;
+      const low = Math.floor(idx);
+      const high = Math.min(low + 1, audioData.length - 1);
+      const fraction = idx - low;
+      
+      result[i] = audioData[low] * (1 - fraction) + audioData[high] * fraction;
+    }
+    
+    return result;
+  }
+
+  async function playNextInQueue() {
+    if (audioQueue.length === 0 || isPlaying) {
+      return;
+    }
+
+    isPlaying = true;
+    const float32Data = audioQueue.shift();
+    
+    // Resample incoming audio from server sample rate to AudioContext sample rate
+    const resampledData = resample(float32Data, SERVER_SAMPLE_RATE, audioContext.sampleRate);
+    
+    const audioBuffer = audioContext.createBuffer(1, resampledData.length, audioContext.sampleRate);
+    audioBuffer.getChannelData(0).set(resampledData);
+    
+    const bufferSource = audioContext.createBufferSource();
+    bufferSource.buffer = audioBuffer;
+    
+    const duration = audioBuffer.duration;
+    if (nextPlayTime < audioContext.currentTime) {
+      nextPlayTime = audioContext.currentTime;
+    }
+    
+    bufferSource.connect(gainNode);
+    bufferSource.start(nextPlayTime);
+    
+    nextPlayTime += duration;
+    
+    bufferSource.onended = () => {
+      isPlaying = false;
+      playNextInQueue();
+    };
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    console.log("get user media supported.");
+    navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true
+      } 
+    })
+    .then((stream) => {
+      const actualSampleRate = stream.getAudioTracks()[0].getSettings().sampleRate;
+      console.log("Stream sample rate:", actualSampleRate);
+      
+      audioContext = new AudioContext({
+        channelCount: 1  // mono
+      });
+      
+      gainNode = audioContext.createGain();
+      gainNode.connect(audioContext.destination);
+      gainNode.gain.value = 1.0;
+      
+      console.log("AudioContext sample rate:", audioContext.sampleRate);
+      console.log("Server sample rate:", SERVER_SAMPLE_RATE);
+      console.log("processing stream");
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(1024, 1, 1);
+      
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Resample from browser's sample rate to server's sample rate
+        const resampledData = resample(inputData, audioContext.sampleRate, SERVER_SAMPLE_RATE);
+        
+        // Convert resampled Float32Array to Int16Array (PCM16)
+        const pcm16 = new Int16Array(resampledData.length);
+        for (let i = 0; i < resampledData.length; i++) {
+          const s = Math.max(-1, Math.min(1, resampledData[i]));
+          pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        
+        // Convert to base64
+        const base64 = btoa(
+          String.fromCharCode.apply(null, 
+            new Uint8Array(pcm16.buffer)
+          )
+        );
+        
+        socket.send(base64);
+      };
+      
+      // Connect the nodes for recording
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      // Handle incoming audio data
+      socket.onmessage = async (event) => {
+        try {
+          // Decode base64 to array buffer
+          const binaryString = atob(event.data);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          
+          // Convert to Int16Array
+          const receivedPcm16 = new Int16Array(bytes.buffer);
+          
+          // Convert back to Float32Array for audio playback
+          const float32Data = new Float32Array(receivedPcm16.length);
+          for (let i = 0; i < receivedPcm16.length; i++) {
+            float32Data[i] = receivedPcm16[i] >= 0 ?
+              receivedPcm16[i] / 0x7FFF :
+              receivedPcm16[i] / 0x8000;
+          }
+
+          // Add to queue and attempt to play
+          audioQueue.push(float32Data);
+          playNextInQueue();
+          
+        } catch (error) {
+          console.error("Error processing received audio:", error);
+        }
+      };
+    })
+    .catch(error => {
+      console.error("Error accessing microphone:", error);
+      const errorMsg = document.createElement("p");
+      errorMsg.classList.add("error");
+      errorMsg.innerText = "Error accessing microphone: " + error.message;
+      document.body.appendChild(errorMsg);
+    });
+  } else {
+    const errorMsg = document.createElement("p");
+    errorMsg.classList.add("error");
+    errorMsg.innerText = "audio streaming not available";
+    document.body.appendChild(errorMsg);
+  }
+
+  // Add cleanup function for page unload
+  window.addEventListener('beforeunload', () => {
+    socket.close();
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close();
+    }
   });
 </script>
 </body>
