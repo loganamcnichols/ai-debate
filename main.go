@@ -23,10 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ebitengine/oto/v3"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/websocket"
+
 	"github.com/sashabaranov/go-openai"
 
 	"github.com/joho/godotenv"
@@ -169,17 +171,12 @@ const (
 )
 
 type RealtimeSession struct {
-	Modalities              []string            `json:"modalities"`
-	Instructions            string              `json:"instructions"`
-	Voice                   RealtimeVoice       `json:"voice"`
-	InputAudioFormat        RealtimeAudioFormat `json:"input_audio_format"`
-	OutputAudioFormat       RealtimeAudioFormat `json:"output_audio_format"`
-	InputAudioTranscription ModelSpec           `json:"input_audio_transcription"`
-	TurnDetection           TurnDetection       `json:"turn_detection"`
-	Tools                   []RealtimeTool      `json:"tools"`
-	ToolChoice              string              `json:"tool_choice"`
-	Temperature             float32             `json:"temperature"`
-	MaxResponseOutputTokens interface{}         `json:"max_response_output_tokens"`
+	Modalities        []string            `json:"modalities"`
+	Instructions      string              `json:"instructions"`
+	Voice             RealtimeVoice       `json:"voice"`
+	InputAudioFormat  RealtimeAudioFormat `json:"input_audio_format"`
+	OutputAudioFormat RealtimeAudioFormat `json:"output_audio_format"`
+	TurnDetection     TurnDetection       `json:"turn_detection"`
 }
 
 type RealtimeServerEvent struct {
@@ -203,7 +200,7 @@ type RealtimeServerError struct {
 type RealtimeServerEventError struct {
 	EventID string                  `json:"event_id"`
 	Type    RealtimeServerEventType `json:"type"`
-	Error   RealtimeServerError
+	Error   RealtimeServerError     `json:"error"`
 }
 
 func (r ResponseAudioDelta) GetType() RealtimeServerEventType {
@@ -212,14 +209,28 @@ func (r ResponseAudioDelta) GetType() RealtimeServerEventType {
 
 type SessionUpdate struct {
 	Type    RealtimeClientEventType `json:"type"`
-	EventID string                  `json:"event_id"`
 	Session RealtimeSession         `json:"session"`
 }
 
+type ConversationContent struct {
+	Type  string `json:"type"`
+	Audio string `json:"audio"`
+}
+
+type ConversationItem struct {
+	Type    string                `json:"type"`
+	Role    string                `json:"role"`
+	Content []ConversationContent `json:"content"`
+}
+
+type ConversationItemCreate struct {
+	Type RealtimeClientEventType `json:"type"`
+	Item ConversationItem        `json:"item"`
+}
+
 type InputAudioBufferAppend struct {
-	Type    RealtimeClientEventType `json:"type"`
-	EventID string                  `json:"event_id"`
-	Audio   string                  `json:"audio"`
+	Type  RealtimeClientEventType `json:"type"`
+	Audio string                  `json:"audio"`
 }
 
 type InputAudioBufferCommit struct {
@@ -1591,6 +1602,65 @@ func initURLs() {
 	REALTIME_ENDPOINT.RawQuery = realtimeParams.Encode()
 }
 
+func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
+	// Create a new audio context
+
+	op := &oto.NewContextOptions{
+		SampleRate:   24000,
+		ChannelCount: 2,
+		Format:       oto.FormatSignedInt16LE,
+	}
+
+	otoCtx, readChan, err := oto.NewContext(op)
+	if err != nil {
+		return fmt.Errorf("unable to init oto context: %v", err)
+	}
+
+	<-readChan
+
+	reader := bytes.NewReader(pcmData)
+
+	player := otoCtx.NewPlayer(reader)
+
+	player.Play()
+
+	for player.IsPlaying() {
+		time.Sleep(time.Millisecond)
+	}
+	return nil
+}
+
+func testWS(w http.ResponseWriter, r *http.Request) {
+	connClient, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("unable to upgrade to websocket: %v\n", err)
+		return
+	}
+
+	defer connClient.Close()
+	var soundBuffer []byte
+	for i := 0; i < 1000; i++ {
+		_, message, err := connClient.ReadMessage()
+		if err != nil {
+			log.Printf("unable to read websocket message: %v\n", err)
+			return
+		}
+		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(message)))
+		_, err = base64.StdEncoding.Decode(decoded, []byte(message))
+		if err != nil {
+			log.Printf("unable to decode base64 webscoket message: %v\n", err)
+		}
+
+		soundBuffer = append(soundBuffer, decoded...)
+
+	}
+	err = PlayPCM16(soundBuffer, 24000, 1)
+	if err != nil {
+		log.Printf("unable to playback sound %v\n", err)
+		return
+	}
+}
+
 func handleWS(w http.ResponseWriter, r *http.Request) {
 	connClient, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -1605,33 +1675,15 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		"OpenAI-Beta":   []string{"realtime=v1"},
 	}
 
-	connServer, _, err := dialer.Dial(REALTIME_ENDPOINT.String(), header)
+	connServer, res, err := dialer.Dial(REALTIME_ENDPOINT.String(), header)
 	if err != nil {
 		log.Printf("unable to establish websocket connection to the realtime api: %v\n", err)
 		return
 	}
 
+	log.Println(res.Status)
+
 	defer connServer.Close()
-
-	clientID := uuid.Must(uuid.NewUUID())
-
-	// randVoiceIdx := rand.Intn(len(RealtimeVoices))
-	// randVoice := RealtimeVoices[randVoiceIdx]
-
-	// err = connServer.WriteJSON(SessionUpdate{
-	// 	EventID: clientID.String(),
-	// 	Type:    SESSION_UPDATE,
-	// 	Session: RealtimeSession{
-	// 		Voice:                   randVoice,
-	// 		Modalities:              []string{"text", "audio"},
-	// 		Tools:                   []RealtimeTool{},
-	// 		MaxResponseOutputTokens: "inf",
-	// 	},
-	// })
-	// if err != nil {
-	// 	log.Printf("error updating session state: %v\n", err)
-	// 	return
-	// }
 
 	go func() {
 		for {
@@ -1642,11 +1694,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			var event RealtimeServerEvent
 			err = json.Unmarshal(data, &event)
+			// log.Println("event from OpenAI:", event.Type)
 			if err != nil {
 				log.Printf("cannot unmarshal data into realtime server event: %v\n", err)
 				return
 			}
-			log.Println("event from OpenAI:", event.Type)
 			switch event.Type {
 			case REALTIME_ERROR:
 				var eventError RealtimeServerEventError
@@ -1655,10 +1707,13 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					log.Printf("unable to unmarshal realtime error type: %v\n", err)
 					return
 				}
+				log.Println(eventError.Error.Message)
+			case SESSION_CREATED:
 			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
 			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
 				log.Println("speech stopped")
 			case RESPONSE_AUDIO_DELTA:
+				log.Println("recieved audio msg")
 				var newAudio ResponseAudioDelta
 				err = json.Unmarshal(data, &newAudio)
 				if err != nil {
@@ -1674,7 +1729,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	var i = 0
 	for {
+		i++
 		mt, message, err := connClient.ReadMessage()
 		if err != nil {
 			log.Printf("unable to read message from websocket: %v\n", err)
@@ -1685,15 +1742,16 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		case websocket.CloseMessage:
 			return
 		case websocket.TextMessage:
-			log.Println("input audio buffer append")
 			err = connServer.WriteJSON(InputAudioBufferAppend{
-				EventID: clientID.String(),
-				Type:    INPUT_AUDIO_BUFFER_APPEND,
-				Audio:   string(message),
+				Type:  INPUT_AUDIO_BUFFER_APPEND,
+				Audio: string(message),
 			})
 			if err != nil {
 				log.Printf("unable to append to audio buffer: %v\n", err)
 				return
+			}
+			if i == 100 {
+				time.Sleep(3 * time.Second)
 			}
 		}
 	}
