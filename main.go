@@ -1680,6 +1680,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	defer connServer.Close()
 
+	const targetRateMS = 24
+
 	go func() {
 		for {
 			_, data, err := connServer.ReadMessage()
@@ -1716,11 +1718,25 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					log.Printf("cannot unmashal data to ResponseAudioDelta: %v\n", err)
 					return
 				}
-				err = connClient.WriteMessage(websocket.TextMessage, []byte(newAudio.Delta))
+
+				pcm16, err := base64.StdEncoding.DecodeString(newAudio.Delta)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+
+				nSamples := len(pcm16) / 2
+
+				pauseMS := nSamples / targetRateMS
+
+				err = connClient.WriteMessage(websocket.BinaryMessage, pcm16)
 				if err != nil {
 					log.Printf("error writing response back to the client: %v\n", err)
 					return
 				}
+
+				time.Sleep(time.Millisecond * time.Duration(pauseMS))
+
 			}
 		}
 	}()

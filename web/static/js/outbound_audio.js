@@ -41,7 +41,6 @@ class OutboundResampler extends AudioWorkletProcessor {
     if (this.src == null) {
       throw new Error("Resampler not initialized");
     }
-
     const resampled = this.src.full(inputs[0][0]);
 
     const pcm16Buffer = this.floatTo16BitPCM(resampled); 

@@ -122,6 +122,7 @@
     navigator.mediaDevices.getUserMedia({ audio: true })
     .then((stream) => {
       const socket = new WebSocket("/ws");
+      socket.binaryType = "arraybuffer";
       const audioCtx = new AudioContext();
       const inputNode = audioCtx.createMediaStreamSource(stream);
       audioCtx.resume().then(() => {
@@ -134,8 +135,7 @@
               inboundNode.connect(audioCtx.destination);
               inputNode.connect(outboundNode);
               socket.onmessage = (evt) => {
-                const buffer = base64ToArrayBuffer(evt.data);
-                const pcm16 = new Int16Array(buffer);
+                const pcm16 = new Int16Array(evt.data);
                 inboundNode.port.postMessage(pcm16);
               }
               outboundNode.port.onmessage = (evt) => {
