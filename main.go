@@ -80,6 +80,11 @@ var (
 	BLOCKED_VENDOR_TEMPLATE_ID = 1839
 )
 
+const (
+	SPEECH_STARTED byte = 1
+	SPEECH_ENDED   byte = 0
+)
+
 type RealtimeAudioFormat string
 
 const (
@@ -133,7 +138,7 @@ type RealtimeClientEventType string
 const (
 	SESSION_UPDATE             RealtimeClientEventType = "session.update"
 	INPUT_AUDIO_BUFFER_APPEND  RealtimeClientEventType = "input_audio_buffer.append"
-	INPUT_AUDIO_BUFFER_COMMIT  RealtimeClientEventType = "input_aduio_buffer.commit"
+	INPUT_AUDIO_BUFFER_COMMIT  RealtimeClientEventType = "input_audio_buffer.commit"
 	INPUT_AUDIO_BUFFER_CLEAR   RealtimeClientEventType = "input_audio_buffer.clear"
 	CONVERSATION_ITEM_CREATE   RealtimeClientEventType = "conversation.item.create"
 	CONVERSATION_ITEM_TRUNCATE RealtimeClientEventType = "conversation.item.truncate"
@@ -176,7 +181,7 @@ type RealtimeSession struct {
 	Voice             RealtimeVoice       `json:"voice"`
 	InputAudioFormat  RealtimeAudioFormat `json:"input_audio_format"`
 	OutputAudioFormat RealtimeAudioFormat `json:"output_audio_format"`
-	TurnDetection     TurnDetection       `json:"turn_detection"`
+	TurnDetection     interface{}         `json:"turn_detection"`
 }
 
 type RealtimeServerEvent struct {
@@ -234,8 +239,11 @@ type InputAudioBufferAppend struct {
 }
 
 type InputAudioBufferCommit struct {
-	Type    RealtimeClientEventType `json:"type"`
-	EventID string                  `json:"event_id"`
+	Type RealtimeClientEventType `json:"type"`
+}
+
+type ResponseCreate struct {
+	Type RealtimeClientEventType `json:"type"`
 }
 
 type Qualification struct {
@@ -1676,6 +1684,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	err = connServer.WriteJSON(SessionUpdate{
+		Type: SESSION_UPDATE,
+		Session: RealtimeSession{
+			Modalities:        []string{"text", "audio"},
+			Instructions:      "You are engaging in a debate around AI",
+			Voice:             BALLAD,
+			InputAudioFormat:  "pcm16",
+			OutputAudioFormat: "pcm16",
+		},
+	})
+
+	if err != nil {
+		log.Printf("unable to update session: %v\n", err)
+		return
+	}
+
 	log.Println(res.Status)
 
 	defer connServer.Close()
@@ -1691,7 +1715,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			var event RealtimeServerEvent
 			err = json.Unmarshal(data, &event)
-			// log.Println("event from OpenAI:", event.Type)
+			log.Println("event from OpenAI:", event.Type)
 			if err != nil {
 				log.Printf("cannot unmarshal data into realtime server event: %v\n", err)
 				return
@@ -1704,7 +1728,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					log.Printf("unable to unmarshal realtime error type: %v\n", err)
 					return
 				}
-				log.Println(eventError.Error.Message)
+				log.Printf("received error message: %s\n", eventError.Error.Message)
 			case SESSION_CREATED:
 			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
 				log.Println("speech started")
@@ -1746,6 +1770,28 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("unable to read message from websocket: %v\n", err)
 			return
+		}
+
+		if len(message) == 1 {
+			switch message[0] {
+			case SPEECH_STARTED:
+			case SPEECH_ENDED:
+				err = connServer.WriteJSON(InputAudioBufferCommit{
+					Type: INPUT_AUDIO_BUFFER_COMMIT,
+				})
+				if err != nil {
+					log.Printf("unable to commit audio buffer: %v\n", err)
+					return
+				}
+				err = connServer.WriteJSON(ResponseCreate{
+					Type: RESPONSE_CREATE,
+				})
+				if err != nil {
+					log.Printf("unable to initiate response: %v\n", err)
+					return
+				}
+			}
+			continue
 		}
 
 		encoded := base64.StdEncoding.EncodeToString(message)

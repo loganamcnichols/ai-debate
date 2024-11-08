@@ -31,7 +31,6 @@ class InboundResampler extends AudioWorkletProcessor {
 
   procMessage(evt) {
     const pcm16 = evt.data;
-    console.log(pcm16);
     let dataLength = pcm16.length;
     const availableLength = BUFFER_SIZE - this.bufferedFrames;
 

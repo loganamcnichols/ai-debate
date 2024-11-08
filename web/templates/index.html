@@ -8,6 +8,8 @@
   <script src="https://unpkg.com/htmx.org@2.0.2/dist/htmx.js" integrity="sha384-yZq+5izaUBKcRgFbxgkRYwpHhHHCpp5nseXp0MEQ1A4MTWVMnqkmcuFez8x5qfxr" crossorigin="anonymous"></script>
   <script src="static/js/sse.min.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.19/dist/bundle.min.js"></script>
 </head>
 <body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
       hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
@@ -116,6 +118,8 @@
     return bytes.buffer;
   }
 
+  const SPEECH_STARTED = 1;
+  const SPEECH_ENDED = 0;
 
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     console.log("get user media supported.");
@@ -134,6 +138,7 @@
               const outboundNode = new AudioWorkletNode(audioCtx, "outbound-resampler");
               inboundNode.connect(audioCtx.destination);
               inputNode.connect(outboundNode);
+
               socket.onmessage = (evt) => {
                 const pcm16 = new Int16Array(evt.data);
                 inboundNode.port.postMessage(pcm16);
@@ -142,6 +147,16 @@
                 const arrayBuffer = evt.data;
                 socket.send(arrayBuffer);
               };
+              vad.MicVAD.new({
+                onSpeechStart: () => {
+                  socket.send(new Uint8Array([SPEECH_STARTED]));
+                  console.log("Speech start detected");
+                },
+                onSpeechEnd: (audio) => {
+                  socket.send(new Uint8Array([SPEECH_ENDED]));
+                  console.log("Speech end detected");
+                }
+              }).then(vad => vad.start());
             });
           });
         });
