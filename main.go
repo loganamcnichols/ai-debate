@@ -1606,8 +1606,8 @@ func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
 	// Create a new audio context
 
 	op := &oto.NewContextOptions{
-		SampleRate:   24000,
-		ChannelCount: 2,
+		SampleRate:   sampleRate,
+		ChannelCount: 1,
 		Format:       oto.FormatSignedInt16LE,
 	}
 
@@ -1630,7 +1630,7 @@ func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
 	return nil
 }
 
-func testWS(w http.ResponseWriter, r *http.Request) {
+func testWSOutput(w http.ResponseWriter, r *http.Request) {
 	connClient, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("unable to upgrade to websocket: %v\n", err)
@@ -1645,13 +1645,8 @@ func testWS(w http.ResponseWriter, r *http.Request) {
 			log.Printf("unable to read websocket message: %v\n", err)
 			return
 		}
-		decoded := make([]byte, base64.StdEncoding.DecodedLen(len(message)))
-		_, err = base64.StdEncoding.Decode(decoded, []byte(message))
-		if err != nil {
-			log.Printf("unable to decode base64 webscoket message: %v\n", err)
-		}
 
-		soundBuffer = append(soundBuffer, decoded...)
+		soundBuffer = append(soundBuffer, message...)
 
 	}
 	err = PlayPCM16(soundBuffer, 24000, 1)
@@ -1710,6 +1705,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				log.Println(eventError.Error.Message)
 			case SESSION_CREATED:
 			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
+				log.Println("speech started")
 			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
 				log.Println("speech stopped")
 			case RESPONSE_AUDIO_DELTA:
@@ -1729,30 +1725,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	var i = 0
 	for {
-		i++
-		mt, message, err := connClient.ReadMessage()
+		_, message, err := connClient.ReadMessage()
 		if err != nil {
 			log.Printf("unable to read message from websocket: %v\n", err)
 			return
 		}
 
-		switch mt {
-		case websocket.CloseMessage:
+		encoded := base64.StdEncoding.EncodeToString(message)
+
+		err = connServer.WriteJSON(InputAudioBufferAppend{
+			Type:  INPUT_AUDIO_BUFFER_APPEND,
+			Audio: encoded,
+		})
+		if err != nil {
+			log.Printf("unable to append to audio buffer: %v\n", err)
 			return
-		case websocket.TextMessage:
-			err = connServer.WriteJSON(InputAudioBufferAppend{
-				Type:  INPUT_AUDIO_BUFFER_APPEND,
-				Audio: string(message),
-			})
-			if err != nil {
-				log.Printf("unable to append to audio buffer: %v\n", err)
-				return
-			}
-			if i == 100 {
-				time.Sleep(3 * time.Second)
-			}
 		}
 	}
 }

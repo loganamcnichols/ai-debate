@@ -36,13 +36,12 @@ class InboundResampler extends AudioWorkletProcessor {
     const availableLength = BUFFER_SIZE - this.bufferedFrames;
 
     if (dataLength > availableLength) {
+      console.log("buffer overflow");
       dataLength = availableLength;
     }
 
-    console.log("data length", dataLength);
     for (let i = 0; i < dataLength; i++) {
       this.buffer[this.writeIndex++] = pcm16[i] / 32768.0;
-      console.log("buffer length", this.buffer.length);
       this.writeIndex %= this.buffer.length;
     }
     this.bufferedFrames += dataLength;
@@ -72,8 +71,6 @@ class InboundResampler extends AudioWorkletProcessor {
       return true;
     }
 
-    console.log("processing output");
-
     const inputSample = new Float32Array(requiredFrames);
     const bufferSpace = this.buffer.length - this.readIndex;
     inputSample.set(this.buffer.slice(this.readIndex, this.readIndex + requiredFrames));
@@ -86,9 +83,6 @@ class InboundResampler extends AudioWorkletProcessor {
     this.bufferedFrames -= inputSample.length;
 
     const resampled = this.src.full(inputSample);
-
-    console.log("resampled frames", resampled.length);
-    console.log("output frames", sampleFrames);
 
     if (resampled.length > sampleFrames) {
       throw new Error("resampled data larger than output");

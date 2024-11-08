@@ -98,10 +98,13 @@
     const bytes = new Uint8Array(buffer);
     const len = bytes.byteLength;
 
-    for (let i = 0; i < len; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    // Handle large buffers by processing in chunks
+    const chunkSize = 0x8000; // 32KB
+    for (let i = 0; i < len; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
     }
-    return btoa(binary);
+
+    return window.btoa(binary);
   }
 
   function base64ToArrayBuffer(base64) {
@@ -131,19 +134,13 @@
               inboundNode.connect(audioCtx.destination);
               inputNode.connect(outboundNode);
               socket.onmessage = (evt) => {
-                console.log("event.data", event.data);
                 const buffer = base64ToArrayBuffer(evt.data);
                 const pcm16 = new Int16Array(buffer);
                 inboundNode.port.postMessage(pcm16);
               }
               outboundNode.port.onmessage = (evt) => {
                 const arrayBuffer = evt.data;
-
-                // Convert the ArrayBuffer to a base64 string
-                const base64String = arrayBufferToBase64(arrayBuffer);
-
-                // Send the base64-encoded string
-                socket.send(base64String);
+                socket.send(arrayBuffer);
               };
             });
           });

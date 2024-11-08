@@ -8,12 +8,11 @@ class OutboundResampler extends AudioWorkletProcessor {
   async init() {
     const { create, ConverterType } = globalThis.LibSampleRate;
     let nChannels = 1;
-    console.log("sample rate", sampleRate);
     let inputSampleRate = sampleRate;
     let outputSampleRate = TARGET_SAMPLE_RATE;
 
     create(nChannels, inputSampleRate, outputSampleRate, {
-      convertorType: ConverterType.SRC_SINC_BEST_QUALITY,
+      convertorType: ConverterType.SRC_LINEAR,
     }).then((src) => {
       this.src = src;
     });
@@ -30,16 +29,27 @@ class OutboundResampler extends AudioWorkletProcessor {
     return buffer;
   }
 
+  int16ToFloat32(int16Array) {
+      const float32Array = new Float32Array(int16Array.length);
+      for (let i = 0; i < int16Array.length; i++) {
+          float32Array[i] = int16Array[i] / 32768; // Normalize to range -1.0 to 1.0
+      }
+      return float32Array;
+  }
+
   process(inputs, outputs, params) {
     if (this.src == null) {
       throw new Error("Resampler not initialized");
     }
 
-    // const resampled = this.src.full(inputs[0][0]);
-    const pcm16Buffer = this.floatTo16BitPCM(inputs[0][0]);
+    const resampled = this.src.full(inputs[0][0]);
+
+    const pcm16Buffer = this.floatTo16BitPCM(resampled); 
 
     // Send the ArrayBuffer directly
-    this.port.postMessage(pcm16Buffer, [pcm16Buffer]); // Transfer ownership
+    this.port.postMessage(pcm16Buffer); // Transfer ownership
+
+    return true;
   }
 
 }
