@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ebitengine/oto/v3"
+	// "github.com/ebitengine/oto/v3"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
@@ -1627,59 +1627,59 @@ func initURLs() {
 	REALTIME_ENDPOINT.RawQuery = realtimeParams.Encode()
 }
 
-func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
-	// Create a new audio context
+// func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
+// 	// Create a new audio context
 
-	op := &oto.NewContextOptions{
-		SampleRate:   sampleRate,
-		ChannelCount: 1,
-		Format:       oto.FormatSignedInt16LE,
-	}
+// 	op := &oto.NewContextOptions{
+// 		SampleRate:   sampleRate,
+// 		ChannelCount: 1,
+// 		Format:       oto.FormatSignedInt16LE,
+// 	}
 
-	otoCtx, readChan, err := oto.NewContext(op)
-	if err != nil {
-		return fmt.Errorf("unable to init oto context: %v", err)
-	}
+// 	otoCtx, readChan, err := oto.NewContext(op)
+// 	if err != nil {
+// 		return fmt.Errorf("unable to init oto context: %v", err)
+// 	}
 
-	<-readChan
+// 	<-readChan
 
-	reader := bytes.NewReader(pcmData)
+// 	reader := bytes.NewReader(pcmData)
 
-	player := otoCtx.NewPlayer(reader)
+// 	player := otoCtx.NewPlayer(reader)
 
-	player.Play()
+// 	player.Play()
 
-	for player.IsPlaying() {
-		time.Sleep(time.Millisecond)
-	}
-	return nil
-}
+// 	for player.IsPlaying() {
+// 		time.Sleep(time.Millisecond)
+// 	}
+// 	return nil
+// }
 
-func testWSOutput(w http.ResponseWriter, r *http.Request) {
-	connClient, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("unable to upgrade to websocket: %v\n", err)
-		return
-	}
+// func testWSOutput(w http.ResponseWriter, r *http.Request) {
+// 	connClient, err := upgrader.Upgrade(w, r, nil)
+// 	if err != nil {
+// 		log.Printf("unable to upgrade to websocket: %v\n", err)
+// 		return
+// 	}
 
-	defer connClient.Close()
-	var soundBuffer []byte
-	for i := 0; i < 1000; i++ {
-		_, message, err := connClient.ReadMessage()
-		if err != nil {
-			log.Printf("unable to read websocket message: %v\n", err)
-			return
-		}
+// 	defer connClient.Close()
+// 	var soundBuffer []byte
+// 	for i := 0; i < 1000; i++ {
+// 		_, message, err := connClient.ReadMessage()
+// 		if err != nil {
+// 			log.Printf("unable to read websocket message: %v\n", err)
+// 			return
+// 		}
 
-		soundBuffer = append(soundBuffer, message...)
+// 		soundBuffer = append(soundBuffer, message...)
 
-	}
-	err = PlayPCM16(soundBuffer, 24000, 1)
-	if err != nil {
-		log.Printf("unable to playback sound %v\n", err)
-		return
-	}
-}
+// 	}
+// 	err = PlayPCM16(soundBuffer, 24000, 1)
+// 	if err != nil {
+// 		log.Printf("unable to playback sound %v\n", err)
+// 		return
+// 	}
+// }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
 	connClient, err := upgrader.Upgrade(w, r, nil)
