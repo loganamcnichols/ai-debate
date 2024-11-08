@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"database/sql"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -202,6 +203,21 @@ type RealtimeServerError struct {
 	Param   string `json:"param"`
 }
 
+type RealtimeConversationItemTruncate struct {
+	EventID      string                  `json:"event_id"`
+	Type         RealtimeClientEventType `json:"type"`
+	ItemID       string                  `json:"item_id"`
+	ContentIndex int                     `json:"content_index"`
+	AudioEndMS   uint32                  `json:"audio_end_ms"`
+}
+
+type RealtimeConversationItemCreated struct {
+	EventID        string                  `json:"event_id"`
+	Type           RealtimeServerEventType `json:"type"`
+	PreviousItemID string                  `json:"previous_item_id"`
+	Item           ConversationItem        `json:"item"`
+}
+
 type RealtimeServerEventError struct {
 	EventID string                  `json:"event_id"`
 	Type    RealtimeServerEventType `json:"type"`
@@ -224,6 +240,7 @@ type ConversationContent struct {
 
 type ConversationItem struct {
 	Type    string                `json:"type"`
+	ID      string                `json:"id"`
 	Role    string                `json:"role"`
 	Content []ConversationContent `json:"content"`
 }
@@ -1706,6 +1723,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	const targetRateMS = 24
 
+	currentConversationItemID := ""
+
 	go func() {
 		for {
 			_, data, err := connServer.ReadMessage()
@@ -1730,6 +1749,14 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				}
 				log.Printf("received error message: %s\n", eventError.Error.Message)
 			case SESSION_CREATED:
+			case CONVERSATION_ITEM_CREATED:
+				var msg RealtimeConversationItemCreated
+				err = json.Unmarshal(data, &msg)
+				if err != nil {
+					log.Printf("unable to unmarshal realtime conversation item created: %v\n", err)
+					return
+				}
+				currentConversationItemID = msg.Item.ID
 			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
 				log.Println("speech started")
 			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
@@ -1772,9 +1799,21 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if len(message) == 1 {
+		if len(message) <= 5 {
 			switch message[0] {
 			case SPEECH_STARTED:
+				audioMS := binary.LittleEndian.Uint32(message[1:])
+				if currentConversationItemID != "" {
+					err = connServer.WriteJSON(RealtimeConversationItemTruncate{
+						Type:       CONVERSATION_ITEM_TRUNCATE,
+						ItemID:     currentConversationItemID,
+						AudioEndMS: audioMS,
+					})
+					if err != nil {
+						log.Printf("unable to truncate conversation item: %v\n", err)
+						return
+					}
+				}
 			case SPEECH_ENDED:
 				err = connServer.WriteJSON(InputAudioBufferCommit{
 					Type: INPUT_AUDIO_BUFFER_COMMIT,
