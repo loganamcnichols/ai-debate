@@ -193,6 +193,7 @@ type RealtimeServerEvent struct {
 type ResponseAudioDelta struct {
 	EventID string                  `json:"event_id"`
 	Type    RealtimeServerEventType `json:"type"`
+	ItemID  string                  `json:"item_id"`
 	Delta   string                  `json:"delta"`
 }
 
@@ -1723,6 +1724,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	const targetRateMS = 24
 
+	flushing := false
+
 	currentConversationItemID := ""
 
 	go func() {
@@ -1757,11 +1760,13 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				currentConversationItemID = msg.Item.ID
-			case INPUT_AUDIO_BUFFER_SPEECH_STARTED:
-				log.Println("speech started")
+				flushing = false
 			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
 				log.Println("speech stopped")
 			case RESPONSE_AUDIO_DELTA:
+				if flushing {
+					continue
+				}
 				log.Println("recieved audio msg")
 				var newAudio ResponseAudioDelta
 				err = json.Unmarshal(data, &newAudio)
@@ -1802,6 +1807,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		if len(message) <= 5 {
 			switch message[0] {
 			case SPEECH_STARTED:
+				flushing = true
 				audioMS := binary.LittleEndian.Uint32(message[1:])
 				if currentConversationItemID != "" {
 					err = connServer.WriteJSON(RealtimeConversationItemTruncate{
