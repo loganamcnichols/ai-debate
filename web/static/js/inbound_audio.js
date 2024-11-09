@@ -75,11 +75,8 @@ class InboundResampler extends AudioWorkletProcessor {
 
     this.bufferedFrames -= sampleFrames;
 
-    for (let i = 0; i < sampleFrames; i++) {
-      // Output the sample to all channels
-      for (let channel = 0; channel < channelCount; channel++) {
-        output[channel][i] = inputSample[i];
-      }
+    for (const channel of output) {
+      channel.set(inputSample);
     }
 
     const audioMS = sampleFrames / sampleRate * 1000;
