@@ -24,7 +24,7 @@ class OutboundResampler extends AudioWorkletProcessor {
       return float32Array;
   }
 
-  process(inputs, outputs, params) {
+  process(inputs, _) {
     const resampled = inputs[0][0];
 
     const pcm16Buffer = this.floatTo16BitPCM(resampled); 
