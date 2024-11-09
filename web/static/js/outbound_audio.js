@@ -30,7 +30,7 @@ class OutboundResampler extends AudioWorkletProcessor {
     const pcm16Buffer = this.floatTo16BitPCM(resampled); 
 
     // Send the ArrayBuffer directly
-    this.port.postMessage(pcm16Buffer); // Transfer ownership
+    this.port.postMessage(pcm16Buffer, [pcm16Buffer.buffer]); // Transfer ownership
 
     return true;
   }
