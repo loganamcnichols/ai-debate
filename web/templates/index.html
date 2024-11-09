@@ -121,57 +121,117 @@
   const SPEECH_STARTED = 1;
   const SPEECH_ENDED = 0;
 
-  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-    console.log("get user media supported.");
-    navigator.mediaDevices.getUserMedia({ audio: true })
-    .then((stream) => {
+  async function setupAudioStream() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error("getUserMedia not supported");
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioCtx = new AudioContext();
-      const socket = new WebSocket(`/ws?sample-rate=${audioCtx.sampleRate}`);
+      const socket = new WebSocket(`ws://localhost:8080/ws?sample-rate=${audioCtx.sampleRate}`);
       socket.binaryType = "arraybuffer";
+      
+      // Wait for WebSocket connection
+      await new Promise((resolve, reject) => {
+        socket.onopen = resolve;
+        socket.onerror = reject;
+        socket.onclose = (event) => {
+          console.error('WebSocket closed unexpectedly:', event.code, event.reason);
+          // Attempt to reconnect or handle closure
+        };
+      });
+
       const inputNode = audioCtx.createMediaStreamSource(stream);
       let responseMS = 0;
-      audioCtx.resume().then(() => {
-        audioCtx.audioWorklet.addModule("static/js/inbound_audio.js").then(() => {
-          audioCtx.audioWorklet.addModule("static/js/outbound_audio.js").then(() => {
-            const inboundNode = new AudioWorkletNode(audioCtx, "inbound-resampler");
-            const outboundNode = new AudioWorkletNode(audioCtx, "outbound-resampler");
-            inboundNode.connect(audioCtx.destination);
-            inputNode.connect(outboundNode);
 
-            inboundNode.port.onmessage = (evt) => {
-              responseMS += evt.data;
-            }
+      await audioCtx.resume();
+      
+      // Load audio worklets
+      await audioCtx.audioWorklet.addModule("static/js/inbound_audio.js");
+      await audioCtx.audioWorklet.addModule("static/js/outbound_audio.js");
 
-            socket.onmessage = (evt) => {
-              const pcm16 = new Int16Array(evt.data);
-              inboundNode.port.postMessage(pcm16);
+      const inboundNode = new AudioWorkletNode(audioCtx, "inbound-resampler");
+      const outboundNode = new AudioWorkletNode(audioCtx, "outbound-resampler");
+      
+      // Set up audio routing
+      inboundNode.connect(audioCtx.destination);
+      inputNode.connect(outboundNode);
+
+      // Set up message handlers
+      inboundNode.port.onmessage = (evt) => {
+        responseMS += evt.data;
+      };
+
+      socket.onmessage = (evt) => {
+        const pcm16 = new Int16Array(evt.data);
+        inboundNode.port.postMessage(pcm16);
+      };
+
+      outboundNode.port.onmessage = (evt) => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(evt.data);
+        }
+      };
+
+      // Initialize VAD
+      const vadInstance = await vad.MicVAD.new({
+        onSpeechStart: () => {
+          try {
+            const msg = new Uint8Array(5);
+            inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
+            msg[0] = SPEECH_STARTED;
+            new DataView(msg.buffer).setUint32(1, responseMS, true);
+            
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(msg);
             }
-            outboundNode.port.onmessage = (evt) => {
-              const arrayBuffer = evt.data;
-              socket.send(arrayBuffer);
-            };
-            vad.MicVAD.new({
-              onSpeechStart: () => {
-                const msg = new Uint8Array(5);
-                inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
-                msg[0] = SPEECH_STARTED;
-                new DataView(msg.buffer).setUint32(1, responseMS, true);
-                socket.send(msg);
-                console.log("Speech start detected");
-                responseMS = 0;
-              },
-              onSpeechEnd: (audio) => {
-                const msg = new Uint8Array(5);
-                msg[0] = SPEECH_ENDED;
-                inboundNode.port.postMessage(new Int16Array([SPEECH_ENDED]));
-                socket.send(msg);
-              }
-            }).then(vad => vad.start());
-          });
-        });
+            console.log("Speech start detected");
+            responseMS = 0;
+          } catch (error) {
+            console.error('Error in speech start handler:', error);
+          }
+        },
+        onSpeechEnd: (audio) => {
+          try {
+            const msg = new Uint8Array(5);
+            msg[0] = SPEECH_ENDED;
+            inboundNode.port.postMessage(new Int16Array([SPEECH_ENDED]));
+            
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(msg);
+            }
+          } catch (error) {
+            console.error('Error in speech end handler:', error);
+          }
+        }
       });
-    });
+
+      await vadInstance.start();
+      
+      return {
+        cleanup: () => {
+          socket.close();
+          audioCtx.close();
+          vadInstance.stop();
+        }
+      };
+
+    } catch (error) {
+      console.error('Setup failed:', error);
+      throw error;
+    }
   }
+
+  // Usage
+  setupAudioStream()
+    .then(({ cleanup }) => {
+      // Store cleanup function for later use
+      window.cleanupAudio = cleanup;
+    })
+    .catch(error => {
+      console.error('Failed to initialize audio stream:', error);
+    });
 </script>
 </body>
 </html>

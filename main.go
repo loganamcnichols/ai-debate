@@ -213,6 +213,15 @@ type RealtimeConversationItemTruncate struct {
 	AudioEndMS   uint32                  `json:"audio_end_ms"`
 }
 
+type RealtimeResponse struct {
+	ID string
+}
+
+type RealtimeResponseCreated struct {
+	Type     RealtimeServerEventType `json:"type"`
+	Response RealtimeResponse        `json:"response"`
+}
+
 type RealtimeConversationItemCreated struct {
 	EventID        string                  `json:"event_id"`
 	Type           RealtimeServerEventType `json:"type"`
@@ -1731,8 +1740,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	const targetSampleRate = 24000
 
 	flushing := false
-
-	currentConversationItemID := ""
+	responseInProgress := false
+	lastAssistantMsgID := ""
 
 	go func() {
 		for {
@@ -1758,17 +1767,29 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				}
 				log.Printf("received error message: %s\n", eventError.Error.Message)
 			case SESSION_CREATED:
+				log.Println("created session")
+			case SESSION_UPDATED:
+				log.Println("updated session")
+			case RESPONSE_CREATED:
+				responseInProgress = true
+			case RESPONSE_DONE:
+				responseInProgress = false
 			case CONVERSATION_ITEM_CREATED:
+				log.Println("created conversation item")
 				var msg RealtimeConversationItemCreated
 				err = json.Unmarshal(data, &msg)
 				if err != nil {
 					log.Printf("unable to unmarshal realtime conversation item created: %v\n", err)
 					return
 				}
-				currentConversationItemID = msg.Item.ID
+				if msg.Item.Role == "assistant" {
+					lastAssistantMsgID = msg.Item.ID
+				}
 				flushing = false
-			case INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
-				log.Println("speech stopped")
+			case INPUT_AUDIO_BUFFER_COMMITED:
+				log.Println("committed input audio buffer")
+			case CONVERSATION_ITEM_TRUNCATED:
+				log.Println("truncated conversation item")
 			case RESPONSE_AUDIO_DELTA:
 				if flushing {
 					continue
@@ -1830,12 +1851,13 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		if len(message) <= 5 {
 			switch message[0] {
 			case SPEECH_STARTED:
+				log.Println("speech started detected")
 				flushing = true
 				audioMS := binary.LittleEndian.Uint32(message[1:])
-				if currentConversationItemID != "" {
+				if responseInProgress && lastAssistantMsgID != "" {
 					err = connServer.WriteJSON(RealtimeConversationItemTruncate{
 						Type:       CONVERSATION_ITEM_TRUNCATE,
-						ItemID:     currentConversationItemID,
+						ItemID:     lastAssistantMsgID,
 						AudioEndMS: audioMS,
 					})
 					if err != nil {
@@ -1844,6 +1866,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			case SPEECH_ENDED:
+				log.Println("speech ended detected")
 				err = connServer.WriteJSON(InputAudioBufferCommit{
 					Type: INPUT_AUDIO_BUFFER_COMMIT,
 				})
