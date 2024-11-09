@@ -94,30 +94,6 @@
     startCountdown(60 * chatTime);
   });
 
-  // Helper function to convert ArrayBuffer to base64
-  function arrayBufferToBase64(buffer) {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-
-    // Handle large buffers by processing in chunks
-    const chunkSize = 0x8000; // 32KB
-    for (let i = 0; i < len; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-    }
-
-    return window.btoa(binary);
-  }
-
-  function base64ToArrayBuffer(base64) {
-    const binaryString = atob(base64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
-  }
-
   const SPEECH_STARTED = 1;
   const SPEECH_ENDED = 0;
 
@@ -162,12 +138,10 @@
       inboundNode.port.onmessage = (evt) => {
         responseMS += evt.data;
       };
-
       socket.onmessage = (evt) => {
         const pcm16 = new Int16Array(evt.data);
         inboundNode.port.postMessage(pcm16);
       };
-
       outboundNode.port.onmessage = (evt) => {
         if (socket.readyState === WebSocket.OPEN) {
           socket.send(evt.data);
