@@ -125,51 +125,48 @@
     console.log("get user media supported.");
     navigator.mediaDevices.getUserMedia({ audio: true })
     .then((stream) => {
-      const socket = new WebSocket("/ws");
-      socket.binaryType = "arraybuffer";
       const audioCtx = new AudioContext();
+      const socket = new WebSocket(`/ws?sample-rate=${audioCtx.sampleRate}`);
+      socket.binaryType = "arraybuffer";
       const inputNode = audioCtx.createMediaStreamSource(stream);
       let responseMS = 0;
       audioCtx.resume().then(() => {
         audioCtx.audioWorklet.addModule("static/js/inbound_audio.js").then(() => {
           audioCtx.audioWorklet.addModule("static/js/outbound_audio.js").then(() => {
-            audioCtx.audioWorklet.addModule("https://cdn.jsdelivr.net/npm/@alexanderolsen/libsamplerate-js/dist/libsamplerate.worklet.js"
-            ).then(() => {
-              const inboundNode = new AudioWorkletNode(audioCtx, "inbound-resampler");
-              const outboundNode = new AudioWorkletNode(audioCtx, "outbound-resampler");
-              inboundNode.connect(audioCtx.destination);
-              inputNode.connect(outboundNode);
+            const inboundNode = new AudioWorkletNode(audioCtx, "inbound-resampler");
+            const outboundNode = new AudioWorkletNode(audioCtx, "outbound-resampler");
+            inboundNode.connect(audioCtx.destination);
+            inputNode.connect(outboundNode);
 
-              inboundNode.port.onmessage = (evt) => {
-                responseMS += evt.data;
-              }
+            inboundNode.port.onmessage = (evt) => {
+              responseMS += evt.data;
+            }
 
-              socket.onmessage = (evt) => {
-                const pcm16 = new Int16Array(evt.data);
-                inboundNode.port.postMessage(pcm16);
+            socket.onmessage = (evt) => {
+              const pcm16 = new Int16Array(evt.data);
+              inboundNode.port.postMessage(pcm16);
+            }
+            outboundNode.port.onmessage = (evt) => {
+              const arrayBuffer = evt.data;
+              socket.send(arrayBuffer);
+            };
+            vad.MicVAD.new({
+              onSpeechStart: () => {
+                const msg = new Uint8Array(5);
+                inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
+                msg[0] = SPEECH_STARTED;
+                new DataView(msg.buffer).setUint32(1, responseMS, true);
+                socket.send(msg);
+                console.log("Speech start detected");
+                responseMS = 0;
+              },
+              onSpeechEnd: (audio) => {
+                const msg = new Uint8Array(5);
+                msg[0] = SPEECH_ENDED;
+                inboundNode.port.postMessage(new Int16Array([SPEECH_ENDED]));
+                socket.send(msg);
               }
-              outboundNode.port.onmessage = (evt) => {
-                const arrayBuffer = evt.data;
-                socket.send(arrayBuffer);
-              };
-              vad.MicVAD.new({
-                onSpeechStart: () => {
-                  const msg = new Uint8Array(5);
-                  inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
-                  msg[0] = SPEECH_STARTED;
-                  new DataView(msg.buffer).setUint32(1, responseMS, true);
-                  socket.send(msg);
-                  console.log("Speech start detected");
-                  responseMS = 0;
-                },
-                onSpeechEnd: (audio) => {
-                  const msg = new Uint8Array(5);
-                  msg[0] = SPEECH_ENDED;
-                  inboundNode.port.postMessage(new Int16Array([SPEECH_ENDED]));
-                  socket.send(msg);
-                }
-              }).then(vad => vad.start());
-            });
+            }).then(vad => vad.start());
           });
         });
       });

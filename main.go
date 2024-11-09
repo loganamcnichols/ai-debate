@@ -29,6 +29,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
 	"github.com/gorilla/websocket"
+	"github.com/zaf/resample"
 
 	"github.com/sashabaranov/go-openai"
 
@@ -1683,6 +1684,11 @@ func initURLs() {
 // }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
+	sampleRate, err := strconv.Atoi(r.URL.Query().Get("sample-rate"))
+	if err != nil {
+		log.Printf("missing valid sample-rate param: %v\n", err)
+		return
+	}
 	connClient, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("unable to upgrade to websocket: %v\n", err)
@@ -1722,7 +1728,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	defer connServer.Close()
 
-	const targetRateMS = 24
+	const targetSampleRate = 24000
 
 	flushing := false
 
@@ -1730,6 +1736,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		for {
+			start := time.Now()
 			_, data, err := connServer.ReadMessage()
 			if err != nil {
 				log.Printf("unable to read message from realtime api: %v", err)
@@ -1781,17 +1788,35 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 
-				nSamples := len(pcm16) / 2
-
-				pauseMS := nSamples / targetRateMS
-
-				err = connClient.WriteMessage(websocket.BinaryMessage, pcm16)
+				wsw, err := connClient.NextWriter(websocket.BinaryMessage)
 				if err != nil {
-					log.Printf("error writing response back to the client: %v\n", err)
+					log.Printf("unable to get next writer: %v\n", err)
 					return
 				}
 
-				time.Sleep(time.Millisecond * time.Duration(pauseMS))
+				res, err := resample.New(wsw, float64(targetSampleRate), float64(sampleRate), 1, resample.I16, resample.MediumQ)
+				if err != nil {
+					log.Printf("unable to create resampler: %v\n", err)
+					return
+				}
+
+				n, err := res.Write(pcm16)
+				if err != nil {
+					log.Printf("error writing response back to the client: %v\n", err)
+				}
+
+				res.Close()
+				wsw.Close()
+
+				samples := n / 2
+
+				seconds := float64(samples) / float64(targetSampleRate)
+				milliseconds := int(seconds * 1000)
+
+				end := time.Now()
+
+				pause := time.Millisecond * time.Duration(milliseconds)
+				time.Sleep(pause - end.Sub(start))
 
 			}
 		}
@@ -1839,7 +1864,21 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		encoded := base64.StdEncoding.EncodeToString(message)
+		var buf bytes.Buffer
+		res, err := resample.New(&buf, float64(sampleRate), float64(targetSampleRate), 1, resample.I16, resample.HighQ)
+		if err != nil {
+			log.Printf("unable to create resampler: %v\n", err)
+		}
+
+		_, err = res.Write(message)
+		if err != nil {
+			log.Printf("unable to write message: %v\n", err)
+			return
+		}
+
+		res.Close()
+
+		encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
 
 		err = connServer.WriteJSON(InputAudioBufferAppend{
 			Type:  INPUT_AUDIO_BUFFER_APPEND,
