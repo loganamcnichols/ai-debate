@@ -1744,7 +1744,6 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 			var event RealtimeServerEvent
 			err = json.Unmarshal(data, &event)
-			log.Println("event from OpenAI:", event.Type)
 			if err != nil {
 				log.Printf("cannot unmarshal data into realtime server event: %v\n", err)
 				return
@@ -1774,7 +1773,6 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				if flushing {
 					continue
 				}
-				log.Println("recieved audio msg")
 				var newAudio ResponseAudioDelta
 				err = json.Unmarshal(data, &newAudio)
 				if err != nil {
