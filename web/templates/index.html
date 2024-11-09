@@ -105,7 +105,7 @@
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioCtx = new AudioContext();
-      const socket = new WebSocket(`/ws?sample-rate=${audioCtxsampleRate}`);
+      const socket = new WebSocket(`/ws?sample-rate=${audioCtx.sampleRate}`);
       socket.binaryType = "arraybuffer";
       
       // Wait for WebSocket connection
