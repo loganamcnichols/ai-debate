@@ -9,8 +9,7 @@
   <script src="static/js/sse.min.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body _="on load wait 3s sendMessageToParent('chatlog-id', '{{ .ResponseID }}')"
-      hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
+<body hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <data sse-swap="keep-alive" hx-swap="none"></data>
   <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}m"></data>
