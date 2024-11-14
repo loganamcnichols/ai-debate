@@ -85,16 +85,21 @@ type QuestionRow struct {
 }
 
 type SurveyResponse struct {
-	ID                *uuid.UUID `db:"id" schema:"id"`
-	SurveyID          *uuid.UUID `db:"survey_id" schema:"survey_id"`
-	ResponseID        string     `db:"response_id" schema:"response_id"`
-	StartTime         *time.Time `db:"start_time" schema:"start_time"`
-	WhichLLM          string     `db:"which_llm" schema:"which_llm"`
-	AISpeed           string     `db:"ai_speed" schema:"ai_speed"`
-	MuskOpinion       string     `db:"musk_opinion" schema:"musk_opinion"`
-	PattersonOpinion  string     `db:"patterson_opinion" schema:"patterson_opinion"`
-	KensingtonOpinion string     `db:"kensington_opinion" schema:"kensington_opinion"`
-	Potholes          string     `db:"potholes" schema:"potholes"`
+	ID                    *uuid.UUID `db:"id" schema:"id"`
+	SurveyID              *uuid.UUID `db:"survey_id" schema:"survey_id"`
+	ResponseID            string     `db:"response_id" schema:"response_id"`
+	StartTime             *time.Time `db:"start_time" schema:"start_time"`
+	WhichLLM              string     `db:"which_llm" schema:"which_llm"`
+	AISpeed               string     `db:"ai_speed" schema:"ai_speed"`
+	PowerXBadActor        string     `db:"power_x_bad_actor" schema:"power-x-bad-actor"`
+	AIRegulationApproach  string     `db:"ai_regulation_approach" schema:"ai-regulation-approach"`
+	BanXNoRegulation      string     `db:"ban_x_no_regulation" schema:"ban-x-no-regulation"`
+	BanXMandates          string     `db:"ban_x_mandates" schema:"ban-x-mandates"`
+	MandatesXNoRegulation string     `db:"mandates_x_no_regulation" schema:"mandates-x-no-regulation"`
+	MuskOpinion           string     `db:"musk_opinion" schema:"musk_opinion"`
+	PattersonOpinion      string     `db:"patterson_opinion" schema:"patterson_opinion"`
+	KensingtonOpinion     string     `db:"kensington_opinion" schema:"kensington_opinion"`
+	Potholes              string     `db:"potholes" schema:"potholes"`
 }
 
 func (sq *SurveyResponse) Scan(row *sql.Row) error {
@@ -105,6 +110,11 @@ func (sq *SurveyResponse) Scan(row *sql.Row) error {
 		&sq.StartTime,
 		&sq.WhichLLM,
 		&sq.AISpeed,
+		&sq.PowerXBadActor,
+		&sq.AIRegulationApproach,
+		&sq.BanXNoRegulation,
+		&sq.BanXMandates,
+		&sq.MandatesXNoRegulation,
 		&sq.MuskOpinion,
 		&sq.PattersonOpinion,
 		&sq.KensingtonOpinion,
@@ -116,6 +126,11 @@ func (sq *SurveyResponse) Update() error {
 	_, err := responseUpdateStmt.Exec(
 		sq.WhichLLM,
 		sq.AISpeed,
+		sq.PowerXBadActor,
+		sq.AIRegulationApproach,
+		sq.BanXNoRegulation,
+		sq.BanXMandates,
+		sq.MandatesXNoRegulation,
 		sq.MuskOpinion,
 		sq.PattersonOpinion,
 		sq.KensingtonOpinion,
@@ -123,17 +138,6 @@ func (sq *SurveyResponse) Update() error {
 		sq.ID,
 	)
 	return err
-}
-
-func (sq *SurveyResponse) NoneNull() bool {
-	return (sq.SurveyID != nil &&
-		sq.StartTime != nil &&
-		sq.WhichLLM != "" &&
-		sq.AISpeed != "" &&
-		sq.MuskOpinion != "" &&
-		sq.PattersonOpinion != "" &&
-		sq.KensingtonOpinion != "" &&
-		sq.Potholes != "")
 }
 
 func buildExpandedURL(baseURL string, params url.Values) string {
@@ -1014,7 +1018,7 @@ func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID str
 }
 
 func handleSurvey(w http.ResponseWriter, r *http.Request) {
-	var pageCount = 2
+	var pageCount = 4
 	var survey SurveyResponse
 	decoder := schema.NewDecoder()
 	decoder.IgnoreUnknownKeys(true)
@@ -1192,7 +1196,7 @@ func setToLive(surveyID int) error {
 		Status string `json:"status"`
 	}{Status: "live"})
 	if err != nil {
-		return fmt.Errorf("unable to marshal json for set to live: %v")
+		return fmt.Errorf("unable to marshal json for set to live: %v", err)
 	}
 	req, err := http.NewRequest("PATCH", surveyEndpoint.String(), bytes.NewBuffer(data))
 	if err != nil {
@@ -1496,6 +1500,11 @@ func main() {
 																			 start_time,
 	                                     which_llm, 
 	                                     ai_speed, 
+																			 power_x_bad_actor,
+																			 ai_regulation_approach,
+																			 ban_x_no_regulation,
+																			 ban_x_mandates,
+																			 mandates_x_no_regulation,
 	                                     musk_opinion, 
 	                                     patterson_opinion, 
 																			 kensington_opinion, 
@@ -1509,11 +1518,16 @@ func main() {
 	UPDATE response
 	SET which_llm = $1,
 			ai_speed = $2,
-			musk_opinion = $3,
-			patterson_opinion = $4,
-			kensington_opinion = $5,
-			potholes = $6
-	WHERE id = $7`)
+			power_x_bad_actor = $3,
+			ai_regulation_approach = $4,
+			ban_x_no_regulation = $5,
+			ban_x_mandates = $6,
+			mandates_x_no_regulation = $7,
+			musk_opinion = $8,
+			patterson_opinion = $9,
+			kensington_opinion = $10,
+			potholes = $11
+	WHERE id = $12`)
 	if err != nil {
 		log.Fatalf("Failed to prepare responseUpdateStmt: %v\n", err)
 	}

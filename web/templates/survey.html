@@ -44,7 +44,161 @@
 <main>
   <form hx-post="/survey?response-id={{ .ID }}">
     <div class="survey-question">
-      <h3>Do you have a favorable or unfavorable opinion of Elon Musk?</h3>
+      <h3>3. Some advocates are more concerned about concentration of power in AI and others are more
+             concerned about damage by bad actors using AI.</h3>
+      <h3>Which are you most concerned by?</h3>
+      {{ if eq .PowerXBadActor "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="power-x-bad-actor" value="missing">
+      <input type="radio" id="power" name="power-x-bad-actor" value="power"
+      {{ if eq .PowerXBadActor "power" }}checked{{ end }}>
+      <label for="power">Concentration of power in AI</label><br>
+      <input type="radio" id="bad-actor" name="power-x-bad-actor" value="bad-actor"
+      {{ if eq .PowerXBadActor "bad-actor" }}checked{{ end }}>
+      <label for="bad-actor">Damage by bad actors using AI</label><br>
+      <input type="radio" id="power-x-bad-actor-not-sure" name="power-x-bad-actor" value="not-sure"
+      {{ if eq .PowerXBadActor "not-sure" }}checked{{ end }}>
+      <label for="not-sure-1">Not sure</label>
+    </div>
+
+    <div class="survey-question">
+      <h3>4. Which of the following approaches to AI regulation do you think the US should take?</h3>
+      {{ if eq .AIRegulationApproach "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="ai-regulation-approach" value="missing">
+      <input type="radio" id="strict" name="ai-regulation-approach" value="strict"
+      {{ if eq .AIRegulationApproach "strict"}}checked{{ end }}>
+      <label for="strict">Be as strict as possible and try to slow down the advancement of AI</label><br>
+      <input type="radio" id="moderate" name="ai-regulation-approach" value="moderate"
+      {{ if eq .AIRegulationApproach "moderate" }}checked{{ end }}>
+      <label for="moderate">Remove barriers to advancing AI, but add regulations to ensure AI that is built is safe</label><br>
+      <input type="radio" id="no-regulation" name="ai-regulation-approach" value="no-regulation"
+      {{ if eq .AIRegulationApproach "no-regulation" }}checked{{ end }}>
+      <label for="no-regulation">Remove all regulations on AI to make sure it advances as fast and freely as possible</label><br>
+      <input type="radio" id="ai-regulation-approach-not-sure" name="ai-regulation-approach" value="not-sure"
+      {{ if eq .AIRegulationApproach "not-sure" }}checked{{ end }}>
+      <label for="ai-regulation-approach-not-sure">Not sure</label>
+    </div>
+    <input type="hidden" name="page" value="2">
+    <button class="survey-button" type="submit" name="navigate" value="previous">Previous</button>
+    <button class="survey-button" type="submit" name="navigate" value="next">Next</button>
+  </form>
+</main>
+{{ end }}
+
+{{ define "survey-page-3" }}
+<main>
+  <form hx-post="/survey?response-id={{ .ID }}">
+    <div class="survey-question">
+      <h3>5. Which approach to AI regulation would you prefer?</h3>
+      <h4>Ban:</h4>
+      <p>Under this approach, building AI systems larger than 
+         those currently in existence would be made illegal
+         for the time being. More powerful system would only
+         be allowed to be built after more research as been
+         conducted to prove that these more powerful models
+         would be safe.</p>
+      <h4>No regulation:</h4>
+      <p>Under this approach, AI systems themselves would not
+         be subject to regulatory requirements. All regulation
+         would fall on the users of foundation AI models, who
+         would be responsible for uses of models for illegal
+         activity. Producers of models would not face additional
+         regulation.</p>
+      {{ if eq .BanXNoRegulation "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="ban-x-no-regulation" value="missing">
+      <input type="radio" id="ban" name="ban-x-no-regulation" value="ban"
+      {{ if eq .BanXNoRegulation "ban" }}checked{{ end }}>
+      <label for="ban">Ban</label><br>
+      <input type="radio" id="no-regulation" name="ban-x-no-regulation" value="no-regulation"
+      {{ if eq .BanXNoRegulation "no-regulation" }}checked{{ end }}>
+      <label for="no-regulation">No Regulation</label><br>
+      <input type="radio" id="ban-x-no-regulation-not-sure" name="ban-x-no-regulation" value="not-sure"
+      {{ if eq .BanXNoRegulation "not-sure" }}checked{{ end }}>
+      <label for="ban-x-no-regulation-not-sure">Not sure</label>
+    </div>
+
+    <div class="survey-question">
+      <h3>6. Which approach to AI regulation would you prefer?</h3>
+      <h4>Ban:</h4>
+      <p>Under this approach, building AI systems larger than 
+         those currently in existence would be made illegal
+         for the time being. More powerful system would only
+         be allowed to be built after more research as been
+         conducted to prove that these more powerful models
+         would be safe.</p>
+      <h4>Safety mandates:</h4>
+      <p>Under this approach, companies developing advanced
+         AI systems would be mandated to implement safety
+         measures and security standards for their most
+         advanced models. They could only release the model
+         once a government oversight board certifies they
+         have properly accounted for extreme risks, including
+         preventing AI from being used to create bioweapons
+         and launch cyberattacks.</p>
+      {{ if eq .BanXMandates "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="ban-x-mandates" value="missing">
+      <input type="radio" id="ban-2" name="ban-x-mandates" value="ban"
+      {{ if eq .BanXMandates "ban" }}checked{{ end }}>
+      <label for="ban-2">Ban</label><br>
+      <input type="radio" id="mandates" name="ban-x-mandates" value="mandates"
+      {{ if eq .BanXMandates "mandates" }}checked{{ end }}>
+      <label for="mandates">Mandates</label><br>
+      <input type="radio" id="ban-x-mandates-not-sure" name="ban-x-mandates" value="not-sure"
+      {{ if eq .BanXMandates "not-sure" }}checked{{ end }}>
+      <label for="ban-x-mandates-not-sure">Not sure</label>
+
+    </div>
+    <div class="survey-question">
+      <h3>7. Which approach to AI regulation would you prefer?</h3>
+      <h4>No regulation:</h4>
+      <p>Under this approach, AI systems themselves would not
+         be subject to regulatory requirements. All regulation
+         would fall on the users of foundation AI models, who
+         would be responsible for uses of models for illegal
+         activity. Producers of models would not face additional
+         regulation.</p>
+      <h4>Safety mandates:</h4>
+      <p>Under this approach, companies developing advanced
+         AI systems would be mandated to implement safety
+         measures and security standards for their most
+         advanced models. They could only release the model
+         once a government oversight board certifies they
+         have properly accounted for extreme risks, including
+         preventing AI from being used to create bioweapons
+         and launch cyberattacks.</p>
+      {{ if eq .MandatesXNoRegulation "missing" }}
+        <p class="error">You must select one of the options.</p>
+      {{ end }}
+      <input type="hidden" name="mandates-x-no-regulation" value="missing">
+      <input type="radio" id="no-regulation-2" name="mandates-x-no-regulation" value="no-regulation"
+      {{ if eq .MandatesXNoRegulation "no-regulation" }}checked{{ end }}>
+      <label for="no-regulation-2">No Regulation</label><br>
+      <input type="radio" id="mandates-2" name="mandates-x-no-regulation" value="mandates"
+      {{ if eq .MandatesXNoRegulation "mandates" }}checked{{ end }}>
+      <label for="mandates-2">Mandates</label><br>
+      <input type="radio" id="mandates-x-no-regulation-not-sure" name="mandates-x-no-regulation" value="not-sure"
+      {{ if eq .MandatesXNoRegulation "not-sure" }}checked{{ end }}>
+      <label for="mandates-x-no-regulation-not-sure">Not sure</label>
+    </div>
+    <input type="hidden" name="page" value="3">
+    <button class="survey-button" type="submit" name="navigate" value="previous">Previous</button>
+    <button class="survey-button" type="submit" name="navigate" value="next">Next</button>
+  </form>
+</main>
+{{ end }}
+
+{{ define "survey-page-4" }}
+<main>
+  <form hx-post="/survey?response-id={{ .ID }}">
+    <div class="survey-question">
+      <h3>8. Do you have a favorable or unfavorable opinion of Elon Musk?</h3>
       {{ if eq .MuskOpinion "missing" }}
         <p class="error">You must select one of the options.</p>
       {{ end }}
@@ -67,7 +221,7 @@
     </div>
 
     <div class="survey-question">
-      <h3>Do you have a favorable or unfavorable opinion of Emily Patterson?</h3>
+      <h3>9. Do you have a favorable or unfavorable opinion of Emily Patterson?</h3>
       {{ if eq .PattersonOpinion "missing" }}
         <p class="error">You must select one of the options.</p>
       {{ end }}
@@ -90,7 +244,7 @@
     </div>
 
     <div class="survey-question">
-      <h3>Do you have a favorable or unfavorable opinion of Ben Kensington?</h3>
+      <h3>10. Do you have a favorable or unfavorable opinion of Ben Kensington?</h3>
       {{ if eq .KensingtonOpinion "missing" }}
         <p class="error">You must select one of the options.</p>
       {{ end }}
@@ -113,7 +267,7 @@
     </div>
 
     <div class="survey-question">
-      <h3>Would you support or oppose a 100% income and 100% sales tax to fund a program to create potholes in highways?</h3>
+      <h3>11. Would you support or oppose a 100% income and 100% sales tax to fund a program to create potholes in highways?</h3>
       {{ if eq .Potholes "missing" }}
         <p class="error">You must select one of the options.</p>
       {{ end }}
@@ -128,7 +282,7 @@
       {{ if eq .Potholes "not-sure" }}checked{{ end }}>
       <label for="potholes-not-sure">Not sure</label>
     </div>
-    <input type="hidden" name="page" value="2">
+    <input type="hidden" name="page" value="4">
     <button class="survey-button" type="submit" name="navigate" value="previous">Previous</button>
     <button class="survey-button" type="submit" name="navigate" value="next">Complete</button>
   </form>
