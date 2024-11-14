@@ -145,6 +145,7 @@
 
       outboundNode.port.onmessage = (evt) => {
         if (socket.readyState === WebSocket.OPEN) {
+          console.log('outbound data', evt.data);
           socket.send(evt.data);
         }
       };
