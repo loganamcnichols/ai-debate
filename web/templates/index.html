@@ -94,8 +94,10 @@
     startCountdown(60 * chatTime);
   });
 
-  const SPEECH_STARTED = 1;
-  const SPEECH_ENDED = 0;
+  const SPEECH_STARTED = 0;
+  const SPEECH_ENDED = 1;
+  const AUDIO_RECV = 2;
+  let imSpeaking = false;
 
   async function setupAudioStream() {
     try {
@@ -139,13 +141,13 @@
         responseMS += evt.data;
       };
       socket.onmessage = (evt) => {
+        console.log("received message");
         const pcm16 = new Int16Array(evt.data);
         inboundNode.port.postMessage(pcm16);
       };
 
       outboundNode.port.onmessage = (evt) => {
-        if (socket.readyState === WebSocket.OPEN) {
-          console.log('outbound data', evt.data);
+        if (socket.readyState === WebSocket.OPEN && imSpeaking) {
           socket.send(evt.data);
         }
       };
@@ -158,11 +160,11 @@
             inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
             msg[0] = SPEECH_STARTED;
             new DataView(msg.buffer).setUint32(1, responseMS, true);
-            
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(msg);
             }
             console.log("Speech start detected");
+            imSpeaking = true;
             responseMS = 0;
           } catch (error) {
             console.error('Error in speech start handler:', error);
@@ -177,6 +179,8 @@
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(msg);
             }
+            console.log("Speech end detected");
+            imSpeaking = false;
           } catch (error) {
             console.error('Error in speech end handler:', error);
           }

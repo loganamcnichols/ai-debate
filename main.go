@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	Realtime "github.com/loganamcnichols/ai-debate/realtime"
+
 	// "github.com/ebitengine/oto/v3"
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -84,8 +86,9 @@ var (
 )
 
 const (
-	SPEECH_STARTED byte = 1
-	SPEECH_ENDED   byte = 0
+	SPEECH_STARTED byte = 0
+	SPEECH_ENDED   byte = 1
+	AUDIO_RECV     byte = 2
 )
 
 type BotSelection string
@@ -112,12 +115,20 @@ var BotSelectionResponseSchema = jsonschema.Definition{
 	},
 }
 
+type Speaker = string
+
+const (
+	MODERATOR Speaker = "Moderator"
+	INNOVATE  Speaker = "Innovate"
+	SAFETY    Speaker = "Safety"
+	CLIENT    Speaker = "Client"
+	NONE      Speaker = "None"
+)
+
 type ChatState struct {
-	ClientConn         *websocket.Conn
-	ModeratorConn      *websocket.Conn
-	InnovateConn       *websocket.Conn
-	ResponseMessageID  string
-	ResponseInProgress bool
+	ActiveResponseID string
+	Speaker          Speaker
+	clientSampleRate int
 }
 
 type RealtimeAudioFormat string
@@ -128,20 +139,14 @@ const (
 	G711_ALAW RealtimeAudioFormat = "g711_alaw"
 )
 
-type RealtimeVoice string
-
-const (
-	ALLOY  RealtimeVoice = "alloy"
-	ASH    RealtimeVoice = "ash"
-	BALLAD RealtimeVoice = "ballad"
-	CORAL  RealtimeVoice = "coral"
-	ECHO   RealtimeVoice = "echo"
-	SHIMER RealtimeVoice = "shimmer"
-	VERSE  RealtimeVoice = "verse"
-)
-
-var RealtimeVoices = []RealtimeVoice{
-	ALLOY, ASH, BALLAD, CORAL, ECHO, SHIMER, VERSE,
+var RealtimeVoices = []Realtime.Voice{
+	Realtime.ALLOY,
+	Realtime.ASH,
+	Realtime.BALLAD,
+	Realtime.CORAL,
+	Realtime.ECHO,
+	Realtime.SHIMER,
+	Realtime.VERSE,
 }
 
 type TurnDetectionType string
@@ -168,167 +173,15 @@ type RealtimeTool struct {
 	Parameters  interface{} `json:"parameters"`
 }
 
-type RealtimeClientEventType string
-
 const (
-	SESSION_UPDATE             RealtimeClientEventType = "session.update"
-	INPUT_AUDIO_BUFFER_APPEND  RealtimeClientEventType = "input_audio_buffer.append"
-	INPUT_AUDIO_BUFFER_COMMIT  RealtimeClientEventType = "input_audio_buffer.commit"
-	INPUT_AUDIO_BUFFER_CLEAR   RealtimeClientEventType = "input_audio_buffer.clear"
-	CONVERSATION_ITEM_CREATE   RealtimeClientEventType = "conversation.item.create"
-	CONVERSATION_ITEM_TRUNCATE RealtimeClientEventType = "conversation.item.truncate"
-	CONVERSATION_ITEM_DELETE   RealtimeClientEventType = "conversation.item.delete"
-	RESPONSE_CREATE            RealtimeClientEventType = "response.create"
-	RESPONSE_CANCEL            RealtimeClientEventType = "response.cancel"
+	ModeratorBot BotName = "ModeratorBot"
+	InnovateBot  BotName = "InnovateBot"
+	SafetyBot    BotName = "CautionBot"
 )
 
-type RealtimeServerEventType string
+const REALTIME_SAMPLE_RATE = 24_000
 
-const (
-	REALTIME_ERROR                    RealtimeServerEventType = "error"
-	SESSION_CREATED                   RealtimeServerEventType = "session.created"
-	SESSION_UPDATED                   RealtimeServerEventType = "session.updated"
-	CONVERSATION_CREATED              RealtimeServerEventType = "conversation.created"
-	CONVERSATION_ITEM_CREATED         RealtimeServerEventType = "conversation.item.created"
-	CONVERSATION_ITEM_TRUNCATED       RealtimeServerEventType = "conversation.item.truncated"
-	CONVERSATION_ITEM_DELETED         RealtimeServerEventType = "conversation.item.deleted"
-	INPUT_AUDIO_BUFFER_COMMITED       RealtimeServerEventType = "input_audio_buffer.committed"
-	INPUT_AUDIO_BUFFER_CLEARED        RealtimeServerEventType = "input_audio_buffer.cleared"
-	INPUT_AUDIO_BUFFER_SPEECH_STARTED RealtimeServerEventType = "input_audio_buffer.speech_started"
-	INPUT_AUDIO_BUFFER_SPEECH_STOPPED RealtimeServerEventType = "input_audio_buffer.speech_stopped"
-	RESPONSE_CREATED                  RealtimeServerEventType = "response.created"
-	RESPONSE_DONE                     RealtimeServerEventType = "response.done"
-	RESPONSE_OUTPUT_ITEM_ADDED        RealtimeServerEventType = "response.output_item.added"
-	RESPONSE_OUTPUT_ITEM_DONE         RealtimeServerEventType = "response.output_item.done"
-	RESPONSE_CONTENT_PART_ADDED       RealtimeServerEventType = "response.content_part.added"
-	RESPONSE_CONTENT_PART_DONE        RealtimeServerEventType = "response.content_part.done"
-	RESPONSE_TEXT_DELTA               RealtimeServerEventType = "response.text.delta"
-	RESPONSE_TEXT_DONE                RealtimeServerEventType = "response.text.done"
-	RESPONSE_AUDIO_TRANSCRIPT_DELTA   RealtimeServerEventType = "response.audio_transcript.delta"
-	RESPONSE_AUDIO_TRANSCRIPT_DONE    RealtimeServerEventType = "response.audio_transcript.done"
-	RESPONSE_AUDIO_DELTA              RealtimeServerEventType = "response.audio.delta"
-	RESPONSE_AUDIO_DONE               RealtimeServerEventType = "response.audio.done"
-)
-
-type TranscriptionSettings struct {
-	Model string `json:"model"`
-}
-
-type RealtimeSession struct {
-	Modalities              []string               `json:"modalities"`
-	Instructions            string                 `json:"instructions"`
-	Voice                   RealtimeVoice          `json:"voice"`
-	TurnDetection           interface{}            `json:"turn_detection"`
-	InputAudioTranscription *TranscriptionSettings `json:"input_audio_transcription"`
-}
-
-type RealtimeServerEvent struct {
-	EventID string                  `json:"event_id"`
-	Type    RealtimeServerEventType `json:"type"`
-}
-
-type ResponseTranscriptionDelta struct {
-	Type  RealtimeServerEventType `json:"type"`
-	Delta string                  `json:"delta"`
-}
-
-type ResponseAudioDelta struct {
-	EventID string                  `json:"event_id"`
-	Type    RealtimeServerEventType `json:"type"`
-	ItemID  string                  `json:"item_id"`
-	Delta   string                  `json:"delta"`
-}
-
-type RealtimeServerError struct {
-	Type    string `json:"type"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Param   string `json:"param"`
-}
-
-type RealtimeConversationItemTruncate struct {
-	EventID      string                  `json:"event_id"`
-	Type         RealtimeClientEventType `json:"type"`
-	ItemID       string                  `json:"item_id"`
-	ContentIndex int                     `json:"content_index"`
-	AudioEndMS   uint32                  `json:"audio_end_ms"`
-}
-
-type ResponseContent struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
-type ResponseOutput struct {
-	Content []ResponseContent `json:"content"`
-}
-
-type RealtimeResponse struct {
-	ID     string           `json:"id"`
-	Output []ResponseOutput `json:"output"`
-}
-
-type RealtimeResponseCreated struct {
-	Type     RealtimeServerEventType `json:"type"`
-	Response RealtimeResponse        `json:"response"`
-}
-
-type RealtimeResponseDone struct {
-	Type     RealtimeServerEventType `json:"type"`
-	Response RealtimeResponse
-}
-
-type RealtimeConversationItemCreated struct {
-	EventID        string                  `json:"event_id"`
-	Type           RealtimeServerEventType `json:"type"`
-	PreviousItemID string                  `json:"previous_item_id"`
-	Item           ConversationItem        `json:"item"`
-}
-
-type RealtimeServerEventError struct {
-	EventID string                  `json:"event_id"`
-	Type    RealtimeServerEventType `json:"type"`
-	Error   RealtimeServerError     `json:"error"`
-}
-
-func (r ResponseAudioDelta) GetType() RealtimeServerEventType {
-	return r.Type
-}
-
-type SessionUpdate struct {
-	Type    RealtimeClientEventType `json:"type"`
-	Session RealtimeSession         `json:"session"`
-}
-
-type ConversationContent struct {
-	Type  string `json:"type"`
-	Audio string `json:"audio"`
-}
-
-type ConversationItem struct {
-	Type    string                `json:"type"`
-	ID      string                `json:"id"`
-	Role    string                `json:"role"`
-	Content []ConversationContent `json:"content"`
-}
-
-type ConversationItemCreate struct {
-	Type RealtimeClientEventType `json:"type"`
-	Item ConversationItem        `json:"item"`
-}
-
-type InputAudioBufferAppend struct {
-	Type  RealtimeClientEventType `json:"type"`
-	Audio string                  `json:"audio"`
-}
-
-type InputAudioBufferCommit struct {
-	Type RealtimeClientEventType `json:"type"`
-}
-
-type ResponseCreate struct {
-	Type RealtimeClientEventType `json:"type"`
-}
+type BotName = string
 
 type Qualification struct {
 	Name       string
@@ -1694,60 +1547,6 @@ func initURLs() {
 	REALTIME_ENDPOINT.RawQuery = realtimeParams.Encode()
 }
 
-// func PlayPCM16(pcmData []byte, sampleRate int, numChannels int) error {
-// 	// Create a new audio context
-
-// 	op := &oto.NewContextOptions{
-// 		SampleRate:   sampleRate,
-// 		ChannelCount: 1,
-// 		Format:       oto.FormatSignedInt16LE,
-// 	}
-
-// 	otoCtx, readChan, err := oto.NewContext(op)
-// 	if err != nil {
-// 		return fmt.Errorf("unable to init oto context: %v", err)
-// 	}
-
-// 	<-readChan
-
-// 	reader := bytes.NewReader(pcmData)
-
-// 	player := otoCtx.NewPlayer(reader)
-
-// 	player.Play()
-
-// 	for player.IsPlaying() {
-// 		time.Sleep(time.Millisecond)
-// 	}
-// 	return nil
-// }
-
-// func testWSOutput(w http.ResponseWriter, r *http.Request) {
-// 	connClient, err := upgrader.Upgrade(w, r, nil)
-// 	if err != nil {
-// 		log.Printf("unable to upgrade to websocket: %v\n", err)
-// 		return
-// 	}
-
-// 	defer connClient.Close()
-// 	var soundBuffer []byte
-// 	for i := 0; i < 1000; i++ {
-// 		_, message, err := connClient.ReadMessage()
-// 		if err != nil {
-// 			log.Printf("unable to read websocket message: %v\n", err)
-// 			return
-// 		}
-
-// 		soundBuffer = append(soundBuffer, message...)
-
-// 	}
-// 	err = PlayPCM16(soundBuffer, 24000, 1)
-// 	if err != nil {
-// 		log.Printf("unable to playback sound %v\n", err)
-// 		return
-// 	}
-// }
-
 func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err error) {
 	var err1, err2, err3 error
 	header := http.Header{
@@ -1773,7 +1572,7 @@ func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err
 		return
 	}
 
-	shuffledVoices := make([]RealtimeVoice, len(RealtimeVoices))
+	shuffledVoices := make([]Realtime.Voice, len(RealtimeVoices))
 	copy(shuffledVoices, RealtimeVoices)
 	rand.Shuffle(len(shuffledVoices), func(i, j int) {
 		shuffledVoices[i], shuffledVoices[j] = shuffledVoices[j], shuffledVoices[i]
@@ -1783,24 +1582,24 @@ func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err
 	innovateVoice := shuffledVoices[1]
 	safetyVoice := shuffledVoices[2]
 
-	err1 = connModerator.WriteJSON(SessionUpdate{
-		Type: SESSION_UPDATE,
-		Session: RealtimeSession{
+	err1 = connModerator.WriteJSON(Realtime.SessionUpdate{
+		Type: Realtime.SESSION_UPDATE,
+		Session: Realtime.Session{
 			Modalities: []string{"text", "audio"},
 			Instructions: `
 			You are engaging in a debate on AI. You are the moderator.
 			The user may ask you to ask a question to the debators.`,
 			Voice:         moderatorVoice,
 			TurnDetection: nil,
-			InputAudioTranscription: &TranscriptionSettings{
+			InputAudioTranscription: &Realtime.TranscriptionSettings{
 				Model: "whisper-1",
 			},
 		},
 	})
 
-	err2 = connInnovate.WriteJSON(SessionUpdate{
-		Type: SESSION_UPDATE,
-		Session: RealtimeSession{
+	err2 = connInnovate.WriteJSON(Realtime.SessionUpdate{
+		Type: Realtime.SESSION_UPDATE,
+		Session: Realtime.Session{
 			Modalities: []string{"text", "audio"},
 			Instructions: `
 			You are engaging in a debate around AI and are arguing that
@@ -1810,9 +1609,9 @@ func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err
 		},
 	})
 
-	err3 = connSafety.WriteJSON(SessionUpdate{
-		Type: SESSION_UPDATE,
-		Session: RealtimeSession{
+	err3 = connSafety.WriteJSON(Realtime.SessionUpdate{
+		Type: Realtime.SESSION_UPDATE,
+		Session: Realtime.Session{
 			Modalities: []string{"text", "audio"},
 			Instructions: `
 			You are engaging in a debate on AI. You are arguing that
@@ -1833,105 +1632,672 @@ func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err
 	return connModerator, connInnovate, connSafety, err
 }
 
-func pcmToWAVReader(pcmData []byte, sampleRate int, numChannels int) io.Reader {
-	// Calculate sizes
-	dataSize := len(pcmData)
-	fileSize := dataSize + 36
+// func pcmToWAVReader(pcmData []byte, sampleRate int, numChannels int) io.Reader {
+// 	// Calculate sizes
+// 	dataSize := len(pcmData)
+// 	fileSize := dataSize + 36
 
-	// Create header bytes
-	buf := new(bytes.Buffer)
+// 	// Create header bytes
+// 	buf := new(bytes.Buffer)
 
-	// Write header elements
-	binary.Write(buf, binary.LittleEndian, [4]byte{'R', 'I', 'F', 'F'})
-	binary.Write(buf, binary.LittleEndian, uint32(fileSize))
-	binary.Write(buf, binary.LittleEndian, [4]byte{'W', 'A', 'V', 'E'})
-	binary.Write(buf, binary.LittleEndian, [4]byte{'f', 'm', 't', ' '})
-	binary.Write(buf, binary.LittleEndian, uint32(16))                       // fmt chunk size
-	binary.Write(buf, binary.LittleEndian, uint16(1))                        // audio format (PCM)
-	binary.Write(buf, binary.LittleEndian, uint16(numChannels))              // channels
-	binary.Write(buf, binary.LittleEndian, uint32(sampleRate))               // sample rate
-	binary.Write(buf, binary.LittleEndian, uint32(sampleRate*numChannels*2)) // byte rate
-	binary.Write(buf, binary.LittleEndian, uint16(numChannels*2))            // block align
-	binary.Write(buf, binary.LittleEndian, uint16(16))                       // bits per sample
-	binary.Write(buf, binary.LittleEndian, [4]byte{'d', 'a', 't', 'a'})
-	binary.Write(buf, binary.LittleEndian, uint32(dataSize))
+// 	// Write header elements
+// 	binary.Write(buf, binary.LittleEndian, [4]byte{'R', 'I', 'F', 'F'})
+// 	binary.Write(buf, binary.LittleEndian, uint32(fileSize))
+// 	binary.Write(buf, binary.LittleEndian, [4]byte{'W', 'A', 'V', 'E'})
+// 	binary.Write(buf, binary.LittleEndian, [4]byte{'f', 'm', 't', ' '})
+// 	binary.Write(buf, binary.LittleEndian, uint32(16))                       // fmt chunk size
+// 	binary.Write(buf, binary.LittleEndian, uint16(1))                        // audio format (PCM)
+// 	binary.Write(buf, binary.LittleEndian, uint16(numChannels))              // channels
+// 	binary.Write(buf, binary.LittleEndian, uint32(sampleRate))               // sample rate
+// 	binary.Write(buf, binary.LittleEndian, uint32(sampleRate*numChannels*2)) // byte rate
+// 	binary.Write(buf, binary.LittleEndian, uint16(numChannels*2))            // block align
+// 	binary.Write(buf, binary.LittleEndian, uint16(16))                       // bits per sample
+// 	binary.Write(buf, binary.LittleEndian, [4]byte{'d', 'a', 't', 'a'})
+// 	binary.Write(buf, binary.LittleEndian, uint32(dataSize))
 
-	// Return a reader that combines header and PCM data
-	return io.MultiReader(buf, bytes.NewReader(pcmData))
-}
+// 	// Return a reader that combines header and PCM data
+// 	return io.MultiReader(buf, bytes.NewReader(pcmData))
+// }
 
-func createTranscription(wavReader io.Reader, previousText string) (string, error) {
-	req = openai.AudioRequest{
-		Model:    "whisper-1",
-		FilePath: "wavData",
-		Reader:   wavReader,
-		Prompt:   previousText,
-	}
+// func writeAudio(
+// 	evt Realtime.ResponseAudioDelta,
+// 	conn *websocket.Conn,
+// 	clientSampleRate,
+// 	serverSampleRate int) error {
 
-	res, err := client.CreateTranscription(context.Background(), req)
+// 	pcm16, err := base64.StdEncoding.DecodeString(evt.Delta)
+// 	if err != nil {
+// 		return fmt.Errorf("unable to decode base64 string: %v", err)
+// 	}
+
+// 	log.Println("pcm16 data length:", len(pcm16))
+
+// 	wsw, err := conn.NextWriter(websocket.BinaryMessage)
+// 	if err != nil {
+// 		return fmt.Errorf("unable to create next writer: %v", err)
+// 	}
+
+// 	res, err := resample.New(
+// 		wsw,
+// 		float64(serverSampleRate),
+// 		float64(clientSampleRate),
+// 		1, resample.I16, resample.MediumQ,
+// 	)
+
+// 	if err != nil {
+// 		return fmt.Errorf("unable to resample audio: %v", err)
+// 	}
+
+// 	_, err = res.Write(pcm16)
+// 	if err != nil {
+// 		return fmt.Errorf("unable to write out the pcm audio: %v", err)
+// 	}
+
+// 	res.Close()
+// 	wsw.Close()
+
+// 	return nil
+// }
+
+func processRealtimeAudio(b64Audio string, outClient chan<- []byte, clientSampleRate int) error {
+	pcmAudio, err := base64.StdEncoding.DecodeString(b64Audio)
 	if err != nil {
-		return previousText, err
+		return fmt.Errorf("unable to decode string: %v", err)
 	}
-	return res.Text, nil
+
+	var buf bytes.Buffer
+	resampler, err := resample.New(&buf,
+		float64(REALTIME_SAMPLE_RATE),
+		float64(clientSampleRate),
+		1, resample.I16, resample.HighQ)
+
+	if err != nil {
+		return fmt.Errorf("unable to create audio resampler: %v", err)
+	}
+
+	_, err = resampler.Write(pcmAudio)
+	if err != nil {
+		return fmt.Errorf("unable to resample audio")
+	}
+
+	outClient <- buf.Bytes()
+	return nil
 }
 
-func determineRespondent(audio chan []byte) {
-	inputBuffer := make([]byte, 52000) // Holds two seconds of audio at 24,000hz plus head room
-	outputBuffer := make([]byte, 52000)
-	var transcription string
-	currentOffset := 0
-	for item := range audio {
-		copy(inputBuffer[currentOffset:], item)
-		currentOffset += len(item)
-		if currentOffset > 48000 {
-			copy(outputBuffer, inputBuffer[:currentOffset])
-			wavReader := pcmToWAVReader(outputBuffer[:currentOffset], 24000, 1)
-			createTranscription(wavReader, transcription)
-			currentOffset = 0
+func processRealtimeMsg(msg []byte, state ChatState, outState chan<- ChatState,
+	outClient, outRealtime1, outRealtime2 chan<- []byte) error {
+	var evt Realtime.ServerEvent
+	err := json.Unmarshal(msg, &evt)
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal realtime server event: %v", err)
+	}
+	errTmplUnmarshal := "unable to unmarshal event %s: %v\n"
+
+	switch evt.Type {
+	case Realtime.ERROR:
+		var evt Realtime.Error
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return fmt.Errorf("received realtime error: %s %s", evt.Error.Code, evt.Error.Message)
+	case Realtime.SESSION_CREATED:
+		var evt Realtime.SessionCreated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.SESSION_UPDATED:
+		var evt Realtime.SessionUpdated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_CREATED:
+		var evt Realtime.ConversationCreated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_ITEM_CREATED:
+		var evt Realtime.ConversationItemCreated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_ITEM_TRUNCATED:
+		var evt Realtime.ConversationItemTruncated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_ITEM_DELETED:
+		var evt Realtime.ConversationItemTruncated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_COMPLETED:
+		var evt Realtime.ConversationItemInputAudioTranscriptionCompleted
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.CONVERSATION_ITEM_INPUT_AUDIO_TRANSCRIPTION_FAILED:
+		var evt Realtime.ConversationItemInputAudioTranscriptionFailed
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.INPUT_AUDIO_BUFFER_COMMITED:
+		var evt Realtime.InputAudioBufferCommited
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.INPUT_AUDIO_BUFFER_CLEARED:
+		var evt Realtime.InputAudioBufferCleared
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.INPUT_AUDIO_BUFFER_SPEECH_STARTED:
+		var evt Realtime.InputAudioBufferSpeechStarted
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.INPUT_AUDIO_BUFFER_SPEECH_STOPPED:
+		var evt Realtime.InputAudioBufferSpeechStopped
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_CREATED:
+		var evt Realtime.ResponseCreated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		outState <- ChatState{
+			ActiveResponseID: evt.Response.ID,
+			clientSampleRate: state.clientSampleRate,
+		}
+		return nil
+	case Realtime.RESPONSE_DONE:
+		var evt Realtime.ResponseDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		outState <- ChatState{
+			ActiveResponseID: "",
+			Speaker:          "",
+			clientSampleRate: state.clientSampleRate,
+		}
+		return nil
+	case Realtime.RESPONSE_OUTPUT_ITEM_ADDED:
+		var evt Realtime.ResponseOutputItemAdded
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_OUTPUT_ITEM_DONE:
+		var evt Realtime.ResponseOutputItemDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_CONTENT_PART_ADDED:
+		var evt Realtime.ResponseContentPartAdded
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_CONTENT_PART_DONE:
+		var evt Realtime.ResponseContentPartDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_AUDIO_TRANSCRIPT_DELTA:
+		var evt Realtime.ResponseAudioDelta
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_AUDIO_TRANSCRIPT_DONE:
+		var evt Realtime.ResponseAudioDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+
+		createMessage := Realtime.ConversationItemCreate{
+			Type: Realtime.CONVERSATION_ITEM_CREATE,
+			Item: Realtime.ConversationItem{
+				Type: "message",
+				Role: "assistant",
+				Content: []Realtime.ConversationContent{
+					{
+						Type: "input_text",
+						Text: evt.Transcript,
+					},
+				},
+			},
+		}
+		data, err := json.Marshal(createMessage)
+		if err != nil {
+			return fmt.Errorf("unable to marshal %s: %v", Realtime.CONVERSATION_ITEM_CREATE, err)
+		}
+		outRealtime1 <- data
+		outRealtime2 <- data
+		return nil
+	case Realtime.RESPONSE_AUDIO_DELTA:
+		var evt Realtime.ResponseAudioDelta
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		err = processRealtimeAudio(evt.Delta, outClient, state.clientSampleRate)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	case Realtime.RESPONSE_AUDIO_DONE:
+		var evt Realtime.ResponseAudioDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_TEXT_DELTA:
+		var evt Realtime.ResponseTextDelta
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_TEXT_DONE:
+		var evt Realtime.ResponseTextDone
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_FUNCTION_CALL_ARGUMENTS_DELTA:
+		var evt Realtime.ResponseFunctionCallArgumentsDelta
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RESPONSE_FUNCTION_CALL_ARGUMENTS_DONE:
+		var evt Realtime.ResponseFunctionCallArgumentsDelta
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	case Realtime.RATE_LIMITS_UPDATED:
+		var evt Realtime.RateLimitsUpdated
+		err = json.Unmarshal(msg, &evt)
+		if err != nil {
+			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unrecognized event type: %s", evt.Type)
+	}
+}
+
+func realtimeMessageHandler(msgStream <-chan []byte,
+	stateInStream <-chan ChatState, stateOutStream chan<- ChatState,
+	outClient, outRealtime1, outRealtime2 chan<- []byte) {
+	var state = ChatState{
+		clientSampleRate: 44_000,
+	}
+	for {
+		select {
+		case msg := <-msgStream:
+			err := processRealtimeMsg(msg, state, stateOutStream, outClient, outRealtime1, outRealtime2)
+			if err != nil {
+				log.Println(err)
+			}
+		case newState := <-stateInStream:
+			state = newState
 		}
 	}
 }
 
-func onResponseCreated(data []byte, chatState *ChatState) error {
-	var evt RealtimeResponseCreated
-	err := json.Unmarshal(data, &evt)
+func onClientAudio(data []byte, chatState ChatState,
+	outModerator, outInnovate, outSafety chan<- []byte) error {
+	log.Println("on client audio reached")
+	var buf bytes.Buffer
+	res, err := resample.New(&buf,
+		float64(chatState.clientSampleRate),
+		float64(REALTIME_SAMPLE_RATE),
+		1, resample.I16, resample.HighQ)
 	if err != nil {
-		return fmt.Errorf("unable to unmarshal response.created event: %v\n", err)
+		log.Printf("unable to create resampler: %v\n", err)
 	}
-	chatState.ResponseInProgress = true
+
+	n, err := res.Write(data)
+	res.Close()
+	if err != nil {
+		return fmt.Errorf("unable to write data to resampler")
+	}
+
+	log.Println(n)
+
+	resampled := buf.Bytes()
+	encoded := base64.StdEncoding.EncodeToString(resampled)
+
+	audioAppend := Realtime.InputAudioBufferAppend{
+		Type:  Realtime.INPUT_AUDIO_BUFFER_APPEND,
+		Audio: encoded,
+	}
+
+	msg, err := json.Marshal(audioAppend)
+	if err != nil {
+		return fmt.Errorf("unable to marshal input_audio_buffer.append")
+	}
+
+	outModerator <- msg
+	outInnovate <- msg
+	outSafety <- msg
+
 	return nil
 }
 
-func onResponseDone(data []byte, chatState *ChatState) error {
-	var evt RealtimeResponseCreated
-	err := json.Unmarshal(data, &evt)
-	if err != nil {
-		return fmt.Errorf("unable to unmarshal response.created event: %v\n", err)
+func readWS(conn *websocket.Conn, outStream chan []byte) error {
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("unable to read socket: %v", err)
+		}
+		outStream <- data
 	}
-	chatState.ResponseInProgress = true
 }
 
-func onResponseAudioDelta(data []byte)
+func writeRealtimeWS(conn *websocket.Conn, inStream <-chan []byte) {
+	for data := range inStream {
+		var evt Realtime.ClientEvent
+		err := json.Unmarshal(data, &evt)
+		if err != nil {
+			log.Printf("unable to unmarshal client event: %v\n", err)
+			continue
+		}
 
-func handleRealtimeEvent(data []byte, chatState *ChatState) error {
-	var evt RealtimeServerEvent
-	err := json.Unmarshal(data, &evt)
-	if err != nil {
-		return fmt.Errorf("couldn't unmarshal RealtimeServerEvent: %v\n", err)
+		unmarshalErrTmpl := "unable to unmarshal client event %s: %v\n"
+		writeJSONErrTmpl := "unable to send json of type %s: %v\n"
+
+		switch evt.Type {
+		case Realtime.SESSION_UPDATE:
+			var evt Realtime.SessionUpdate
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.INPUT_AUDIO_BUFFER_APPEND:
+			var evt Realtime.InputAudioBufferAppend
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			log.Println("appending audio buffer")
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.INPUT_AUDIO_BUFFER_CLEAR:
+			var evt Realtime.InputAudioBufferClear
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.INPUT_AUDIO_BUFFER_COMMIT:
+			var evt Realtime.InputAudioBufferCommit
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.CONVERSATION_ITEM_CREATE:
+			var evt Realtime.ConversationItemCreate
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.CONVERSATION_ITEM_DELETE:
+			var evt Realtime.ConversationItemDelete
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.CONVERSATION_ITEM_TRUNCATE:
+			var evt Realtime.ConversationItemTruncate
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.RESPONSE_CREATE:
+			var evt Realtime.ResponseCreate
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		case Realtime.RESPONSE_CANCEL:
+			var evt Realtime.ResponseCancel
+			err := json.Unmarshal(data, &evt)
+			if err != nil {
+				log.Printf(unmarshalErrTmpl, evt.Type, err)
+				continue
+			}
+			err = conn.WriteJSON(evt)
+			if err != nil {
+				log.Printf(writeJSONErrTmpl, evt.Type, err)
+				continue
+			}
+		default:
+			log.Printf("unknown event type: %s", evt.Type)
+			continue
+		}
+	}
+}
+
+func onSpeechStarted(timeBytes []byte, chatState ChatState,
+	outModerator, outInnovate, outSafety chan<- []byte) error {
+	timestamp := binary.LittleEndian.Uint32(timeBytes)
+
+	truncate := Realtime.ConversationItemTruncate{
+		Type:         Realtime.CONVERSATION_ITEM_TRUNCATE,
+		ItemID:       chatState.ActiveResponseID,
+		ContentIndex: 0,
+		AudioEndMS:   timestamp,
 	}
 
-	switch evt.Type {
-	case RESPONSE_CREATED:
-		chatState.ResponseInProgress = true
-	case RESPONSE_DONE:
-		chatState.ResponseInProgress = false
-	case RESPONSE_AUDIO_DELTA:
-	case RESPONSE_AUDIO_TRANSCRIPT_DONE:
+	msg, err := json.Marshal(truncate)
+	if err != nil {
+		return fmt.Errorf("unable to marshal conversation.item.truncate event: %v", err)
+	}
+
+	log.Println("speaker", chatState.Speaker)
+	switch chatState.Speaker {
+	case MODERATOR:
+		outModerator <- msg
+	case INNOVATE:
+		outInnovate <- msg
+	case SAFETY:
+		outSafety <- msg
+	}
+	log.Println("passed")
+	return nil
+}
+
+func getNextSpeaker() Speaker {
+	speakers := []Speaker{MODERATOR, INNOVATE, SAFETY}
+	idx := rand.Intn(len(speakers))
+	return speakers[idx]
+}
+
+func onSpeechEnded(outModerator, outInnovate, outSafety chan<- []byte) error {
+	commit := Realtime.InputAudioBufferCommit{
+		Type: Realtime.INPUT_AUDIO_BUFFER_COMMIT,
+	}
+
+	msg, err := json.Marshal(commit)
+	if err != nil {
+		return fmt.Errorf("unable to marshal input_audio_buffer.commit: %v", err)
+	}
+	log.Println("sending commit message")
+	outModerator <- msg
+	outInnovate <- msg
+	outSafety <- msg
+	log.Println("sent commit message")
+
+	response := Realtime.ResponseCreate{
+		Type: Realtime.RESPONSE_CREATE,
+	}
+
+	msg, err = json.Marshal(response)
+	if err != nil {
+		return fmt.Errorf("unable to marshal response.create: %v", err)
+	}
+
+	speaker := getNextSpeaker()
+
+	switch speaker {
+	case MODERATOR:
+		outModerator <- msg
+	case INNOVATE:
+		outInnovate <- msg
+	case SAFETY:
+		outSafety <- msg
+	}
+
+	return nil
+}
+
+func handleClientMsg(msg []byte, state ChatState, outState chan<- ChatState,
+	outModerator, outInnovate, outSafety chan<- []byte) error {
+	msgType, msg := msg[0], msg[1:]
+	log.Println("message type:", msgType)
+	switch msgType {
+	case SPEECH_STARTED:
+		err := onSpeechStarted(msg, state, outModerator, outInnovate, outSafety)
+		if err != nil {
+			return err
+		}
+		state.Speaker = CLIENT
+		state.ActiveResponseID = ""
+		outState <- state
+		log.Println("returning from handleClientMsg")
+		return nil
+	case SPEECH_ENDED:
+		err := onSpeechEnded(outModerator, outInnovate, outSafety)
+		if err != nil {
+			return err
+		}
+		state.Speaker = NONE
+		state.ActiveResponseID = ""
+		outState <- state
+		return nil
+	case AUDIO_RECV:
+		return onClientAudio(msg, state, outModerator, outInnovate, outSafety)
+	default:
+		return fmt.Errorf("unrecognized type: %d", msgType)
+	}
+}
+
+func clientMessageHandler(msgStream <-chan []byte,
+	stateInStream <-chan ChatState, stateOutStream chan<- ChatState,
+	outModerator, outInnovate, outSafety chan<- []byte) {
+	var state = ChatState{
+		clientSampleRate: 44_000,
+	}
+	for {
+		select {
+		case msg := <-msgStream:
+			handleClientMsg(msg, state, stateOutStream, outModerator, outInnovate, outSafety)
+		case newState := <-stateInStream:
+			state = newState
+		}
+	}
+}
+
+func writeClientWS(conn *websocket.Conn, inStream <-chan []byte) {
+	for data := range inStream {
+		err := conn.WriteMessage(websocket.BinaryMessage, data)
+		if err != nil {
+			log.Printf("unable to write to websocket: %v\n", err)
+		}
 	}
 }
 
 func handleWS(w http.ResponseWriter, r *http.Request) {
-	sampleRate, err := strconv.Atoi(r.URL.Query().Get("sample-rate"))
+	clientSampleRate, err := strconv.Atoi(r.URL.Query().Get("sample-rate"))
 	if err != nil {
 		log.Printf("missing valid sample-rate param: %v\n", err)
 		return
@@ -1944,15 +2310,6 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 	defer connClient.Close()
 
-	readSocket := func(conn *websocket.Conn, byteStream chan []byte) {
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			log.Printf("failed to read message: %v\n", err)
-			return
-		}
-		byteStream <- data
-	}
-
 	connModerator, connInnovate, connSafety, err := initBotCons()
 	if err != nil {
 		log.Printf("failed to initialize chat bots: %s", err)
@@ -1962,302 +2319,81 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	defer connInnovate.Close()
 	defer connSafety.Close()
 
-	streamModerator := make(chan []byte)
-	streamInnovate := make(chan []byte)
-	streamSafety := make(chan []byte)
-	streamClient := make(chan []byte)
+	// Create incoming audio channels
+	inFromModerator := make(chan []byte)
+	inFromInnovate := make(chan []byte)
+	inFromSafety := make(chan []byte)
+	inFromClient := make(chan []byte)
 
-	go readSocket(connModerator, streamModerator)
-	go readSocket(connInnovate, streamInnovate)
-	go readSocket(connSafety, streamSafety)
-	go readSocket(connClient, streamClient)
+	// Connect channels to web sockets
+	go readWS(connModerator, inFromModerator)
+	go readWS(connInnovate, inFromInnovate)
+	go readWS(connSafety, inFromSafety)
+	go readWS(connClient, inFromClient)
 
-	select {
-	case data := <-streamModerator:
+	// Create outgoing audio/client events
+	outToModerator := make(chan []byte)
+	outToInnovate := make(chan []byte)
+	outToSafety := make(chan []byte)
+	outToClient := make(chan []byte)
 
-	case data := <-streamInnovate:
-	case data := <-streamSafety:
+	// Connect outgoing channels to websockets
+	go writeRealtimeWS(connModerator, outToModerator)
+	go writeRealtimeWS(connInnovate, outToInnovate)
+	go writeRealtimeWS(connSafety, outToSafety)
+	go writeClientWS(connClient, outToClient)
+
+	// Create channels to sync state
+	stateInModerator := make(chan ChatState, 4)
+	stateInInnovate := make(chan ChatState, 4)
+	stateInSafety := make(chan ChatState, 4)
+	stateInClient := make(chan ChatState, 4)
+
+	stateOutModerator := make(chan ChatState, 4)
+	stateOutInnovate := make(chan ChatState, 4)
+	stateOutSafety := make(chan ChatState, 4)
+	stateOutClient := make(chan ChatState, 4)
+
+	go realtimeMessageHandler(inFromModerator, stateInModerator, stateOutModerator, outToClient, outToInnovate, outToSafety)
+	go realtimeMessageHandler(inFromInnovate, stateInInnovate, stateOutInnovate, outToClient, outToModerator, outToSafety)
+	go realtimeMessageHandler(inFromSafety, stateInSafety, stateOutSafety, outToClient, outToModerator, outToInnovate)
+	go clientMessageHandler(inFromClient, stateInClient, stateOutClient, outToModerator, outToInnovate, outToSafety)
+
+	chatState := ChatState{
+		clientSampleRate: clientSampleRate,
+		Speaker:          NONE,
 	}
 
-	const targetSampleRate = 24000
-
-	responseInProgress := false
-	lastAssistantMsgID := ""
-
-	err = connModerator.WriteJSON(ResponseCreate{
-		Type: RESPONSE_CREATE,
-	})
-	if err != nil {
-		log.Printf("unable to create opening response: %v\n", err)
-		return
-	}
-
-	var im_speaking = false
-
-	var transcription string
-	var chatHistory []openai.ChatCompletionMessage
-
-	var translateBufferOffset = 0
-	var translateInBuffer = make([]byte, 52000)
-	var translateOutBuffer = make([]byte, 52000)
-
-	handleMicManger := func() {
-		res, err := client.CreateChatCompletion(r.Context(), openai.ChatCompletionRequest{
-			Model:    openai.GPT4oMini,
-			Messages: chatHistory,
-			ResponseFormat: &openai.ChatCompletionResponseFormat{
-				JSONSchema: &openai.ChatCompletionResponseFormatJSONSchema{
-					Schema: &BotSelectionResponseSchema,
-				},
-			},
-		})
-
-		if err != nil {
-			log.Printf("unable to process chat completion: %v\n", err)
-			return
-		}
-
-		if len(res.Choices) == 0 {
-			log.Println("received 0 choices from mic manager")
-			return
-		}
-
-		choice := res.Choices[0]
-		message := choice.Message.Content
-		var botSelection BotSelectionResponse
-
-		err = json.Unmarshal([]byte(message), &botSelection)
-		if err != nil {
-			log.Printf("unable to unmarshal BotSelection: %v\n", err)
-			return
-		}
-
-		switch botSelection.Selection {
-		case BotSelectionModerator:
-			err = respondingHandle.set(connModerator)
-		case BotSelectionInnovate:
-			err = respondingHandle.set(connInnovate)
-		case BotSelectionSafety:
-			err = respondingHandle.set(connSafety)
-		}
-		if err != nil {
-			log.Printf("unable to set responding handle to %s: %v\n", botSelection.Selection, err)
-			return
-		}
-	}
-
-	handleBotMessage := func(handle *ConnectionHandle) {
-		transcriptionCounter := 0
-		for {
-			start := time.Now()
-			_, data, err := handle.ReadMessage()
-			if err != nil {
-				log.Printf("unable to read message from realtime api: %v", err)
-				return
-			}
-			var evt RealtimeServerEvent
-			err = json.Unmarshal(data, &evt)
-			if err != nil {
-				log.Printf("cannot unmarshal data into realtime server event: %v\n", err)
-				return
-			}
-
-			switch evt.Type {
-			case REALTIME_ERROR:
-				var evt RealtimeServerEventError
-				err = json.Unmarshal(data, &evt)
-				if err != nil {
-					log.Printf("unable to unmarshal error: %v\n", err)
-					return
-				}
-				log.Printf("received error from openai: %s\n", evt.Error.Message)
-			case RESPONSE_CREATED:
-				if responseInProgress {
-					log.Fatal("two bots are trying to talk over each other")
-				}
-				responseInProgress = true
-				respondingHandle.set(handle)
-			case RESPONSE_DONE:
-				var evt RealtimeResponseDone
-				err = json.Unmarshal(data, &evt)
-				if err != nil {
-					log.Printf("failed to unmarshal response.done event: %v\n", err)
-					return
-				}
-
-				output := evt.Response.Output
-				if len(output) == 0 {
-					continue
-				}
-				content := evt.Response.Output[0].Content
-				if len(content) == 0 {
-					continue
-				}
-				item := content[0]
-				if item.Type == "text" {
-					chatHistory = append(chatHistory, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleAssistant,
-						Content: item.Text,
-					})
-					chatHistory = append(chatHistory, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleUser,
-						Content: "",
-					})
-				}
-				responseInProgress = false
-			case CONVERSATION_ITEM_CREATED:
-				var evt RealtimeConversationItemCreated
-				err = json.Unmarshal(data, &evt)
-				if err != nil {
-					log.Printf("failed to unmarshal conversation.item.created: %v\n", err)
-					return
-				}
-				if evt.Item.Role == "assistant" {
-					lastAssistantMsgID = evt.Item.ID
-				}
-			case RESPONSE_AUDIO_DELTA:
-				var newAudio ResponseAudioDelta
-				err = json.Unmarshal(data, &newAudio)
-				if err != nil {
-					log.Printf("cannot unmashal data to ResponseAudioDelta: %v\n", err)
-					return
-				}
-
-				pcm16, err := base64.StdEncoding.DecodeString(newAudio.Delta)
-				if err != nil {
-					log.Println(err)
-					return
-				}
-
-				wsw, err := connClient.NextWriter(websocket.BinaryMessage)
-				if err != nil {
-					log.Printf("unable to get next writer: %v\n", err)
-					return
-				}
-
-				res, err := resample.New(wsw, float64(targetSampleRate), float64(sampleRate), 1, resample.I16, resample.MediumQ)
-				if err != nil {
-					log.Printf("unable to create resampler: %v\n", err)
-					return
-				}
-
-				n, err := res.Write(pcm16)
-				if err != nil {
-					log.Printf("error writing response back to the client: %v\n", err)
-				}
-
-				res.Close()
-				wsw.Close()
-
-				samples := n / 2
-
-				seconds := float64(samples) / float64(targetSampleRate)
-				milliseconds := int(seconds * 1000)
-
-				end := time.Now()
-
-				pause := time.Millisecond * time.Duration(milliseconds)
-				time.Sleep(pause - end.Sub(start))
-			}
-		}
-	}
-
-	go handleBotMessage(connModerator)
-	go handleBotMessage(connInnovate)
-	go handleBotMessage(connSafety)
+	stateInModerator <- chatState
+	stateInInnovate <- chatState
+	stateInSafety <- chatState
+	stateInClient <- chatState
 
 	for {
-		_, message, err := connClient.ReadMessage()
-		if err != nil {
-			log.Printf("unable to read message from websocket: %v\n", err)
-			return
-		}
-
-		if len(message) <= 5 {
-			switch message[0] {
-			case SPEECH_STARTED:
-				log.Println("speech started detected")
-				audioMS := binary.LittleEndian.Uint32(message[1:])
-				if responseInProgress && lastAssistantMsgID != "" {
-					err = activateHandle.WriteJSON(RealtimeConversationItemTruncate{
-						Type:       CONVERSATION_ITEM_TRUNCATE,
-						ItemID:     lastAssistantMsgID,
-						AudioEndMS: audioMS,
-					})
-					if err != nil {
-						log.Printf("unable to truncate conversation item: %v\n", err)
-						return
-					}
-				}
-			case SPEECH_ENDED:
-				err1 := connModerator.WriteJSON(InputAudioBufferCommit{Type: INPUT_AUDIO_BUFFER_COMMIT})
-				err2 := connInnovate.WriteJSON(InputAudioBufferCommit{Type: INPUT_AUDIO_BUFFER_COMMIT})
-				err3 := connSafety.WriteJSON(InputAudioBufferCommit{Type: INPUT_AUDIO_BUFFER_COMMIT})
-				if err1 != nil || err2 != nil || err3 != nil {
-					log.Printf("failed to commit audio buffer to one of the sockets: %v\n%v\n%v\n", err1, err2, err3)
-					return
-				}
-
-				err = respondingHandle.WriteJSON(ResponseCreate{
-					Type: RESPONSE_CREATE,
-				})
-				if err != nil {
-					log.Printf("unable to initiate response: %v\n", err)
-					return
-				}
-			}
-		} else {
-			var buf bytes.Buffer
-			res, err := resample.New(&buf, float64(sampleRate), float64(targetSampleRate), 1, resample.I16, resample.HighQ)
-			if err != nil {
-				log.Printf("unable to create resampler: %v\n", err)
-			}
-
-			_, err = res.Write(message)
-			if err != nil {
-				log.Printf("unable to write message: %v\n", err)
-				return
-			}
-
-			res.Close()
-
-			data := buf.Bytes()
-
-			if im_speaking {
-				copy(translateInBuffer[translateBufferOffset:], data)
-				translateBufferOffset += len(data)
-				if translateBufferOffset >= 48000 {
-					copy(translateOutBuffer, translateInBuffer[:translateBufferOffset])
-					reader := pcmToWAVReader(translateOutBuffer[:translateBufferOffset], 24000, 1)
-					transcription, err = createTranscription(reader, transcription)
-					if err != nil {
-						log.Printf("unable to create transcription: %v\n", err)
-						return
-					}
-
-				}
-			}
-
-			encoded := base64.StdEncoding.EncodeToString(data)
-
-			err1 := connModerator.WriteJSON(InputAudioBufferAppend{
-				Type:  INPUT_AUDIO_BUFFER_APPEND,
-				Audio: encoded,
-			})
-			err2 := connInnovate.WriteJSON(InputAudioBufferAppend{
-				Type:  INPUT_AUDIO_BUFFER_APPEND,
-				Audio: encoded,
-			})
-			err3 := connSafety.WriteJSON(InputAudioBufferAppend{
-				Type:  INPUT_AUDIO_BUFFER_APPEND,
-				Audio: encoded,
-			})
-			if err1 != nil || err2 != nil || err3 != nil {
-				log.Printf("unable to append audio buffer: %v\n%v\n%v\n", err1, err2, err3)
-				return
-			}
+		select {
+		case state := <-stateOutModerator:
+			stateInModerator <- state
+			stateInInnovate <- state
+			stateInSafety <- state
+			stateInClient <- state
+		case state := <-stateOutInnovate:
+			stateInModerator <- state
+			stateInInnovate <- state
+			stateInSafety <- state
+			stateInClient <- state
+		case state := <-stateOutSafety:
+			stateInModerator <- state
+			stateInInnovate <- state
+			stateInSafety <- state
+			stateInClient <- state
+		case state := <-stateOutClient:
+			stateInModerator <- state
+			stateInInnovate <- state
+			stateInSafety <- state
+			stateInClient <- state
 		}
 	}
+
 }
 
 func main() {
