@@ -1862,6 +1862,7 @@ func processRealtimeMsg(msg []byte, state ChatState, outState chan<- ChatState,
 		if err != nil {
 			return fmt.Errorf(errTmplUnmarshal, evt.Type, err)
 		}
+		log.Println("writing response audio")
 		err = processRealtimeAudio(evt.Delta, outClient, state.clientSampleRate)
 		if err != nil {
 			return err
@@ -1968,7 +1969,6 @@ func onClientAudio(data []byte, chatState ChatState,
 	outModerator <- msg
 	outInnovate <- msg
 	outSafety <- msg
-	outToTranscribe <- resampled
 	return nil
 }
 
@@ -2234,43 +2234,6 @@ func writeClientWS(conn *websocket.Conn, inStream <-chan []byte) {
 		err := conn.WriteMessage(websocket.BinaryMessage, data)
 		if err != nil {
 			log.Printf("unable to write to websocket: %v\n", err)
-		}
-	}
-}
-
-func waitForReply(realtimeSocket, clientSocket *websocket.Conn, clientSampleRate int) error {
-	for {
-		_, data, err := realtimeSocket.ReadMessage()
-		if err != nil {
-			return fmt.Errorf("unable to read websocket: %v", err)
-		}
-
-		var evt Realtime.ServerEvent
-		err = json.Unmarshal(data, &evt)
-		if err != nil {
-			return fmt.Errorf("unable to unmarshal server event: %v", err)
-		}
-
-		if evt.Type == Realtime.RESPONSE_AUDIO_DELTA {
-			var evt Realtime.ResponseAudioDelta
-			err = json.Unmarshal(data, &evt)
-			if err != nil {
-				return fmt.Errorf("unable to unmarshal audio delta: %v", err)
-			}
-
-			audio, err := processAudioChunk(evt.Delta, clientSampleRate)
-			if err != nil {
-				return err
-			}
-
-			err = clientSocket.WriteMessage(websocket.BinaryMessage, audio)
-			if err != nil {
-				return fmt.Errorf("unable to write to socket: %v", err)
-			}
-		}
-
-		if evt.Type == Realtime.RESPONSE_DONE {
-			return nil
 		}
 	}
 }
