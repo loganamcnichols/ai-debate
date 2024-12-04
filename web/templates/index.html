@@ -97,7 +97,9 @@
   const SPEECH_STARTED = 0;
   const SPEECH_ENDED = 1;
   const AUDIO_RECV = 2;
+  const OPENING_ARGS_END = 3;
   let imSpeaking = false;
+  let openingArgs = true;
 
   async function setupAudioStream() {
     try {
@@ -141,13 +143,19 @@
         responseMS += evt.data;
       };
       socket.onmessage = (evt) => {
-        console.log("received message");
         const pcm16 = new Int16Array(evt.data);
-        inboundNode.port.postMessage(pcm16);
+        if (openingArgs || !imSpeaking) {
+          const pcm16 = new Int16Array(evt.data);
+          if (pcm16[0] === OPENING_ARGS_END) {
+            openingArgs = false;
+          }
+          console.log("pcm 16", pcm16[0]);
+          inboundNode.port.postMessage(pcm16);
+        }
       };
 
       outboundNode.port.onmessage = (evt) => {
-        if (socket.readyState === WebSocket.OPEN && imSpeaking) {
+        if (socket.readyState === WebSocket.OPEN && imSpeaking && !openingArgs) {
           socket.send(evt.data);
         }
       };
@@ -156,10 +164,11 @@
       const vadInstance = await vad.MicVAD.new({
         onSpeechStart: () => {
           try {
-            const msg = new Uint8Array(5);
             inboundNode.port.postMessage(new Int16Array([SPEECH_STARTED]));
-            msg[0] = SPEECH_STARTED;
-            new DataView(msg.buffer).setUint32(1, responseMS, true);
+            const msg = new ArrayBuffer(5);
+            const view = new DataView(msg);
+            view.setInt8(0, SPEECH_STARTED, true);
+            view.setUint32(1, responseMS, true);
             if (socket.readyState === WebSocket.OPEN) {
               socket.send(msg);
             }

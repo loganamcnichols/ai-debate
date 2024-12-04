@@ -1,4 +1,4 @@
-const BUFFER_SIZE = 1 << 20;
+const BUFFER_SIZE = 1 << 22;
 const BUFFERING_CAP = 1 << 12;
 const INPUT_SAMPLE_RATE = 24000;
 
@@ -15,27 +15,17 @@ class InboundResampler extends AudioWorkletProcessor {
     this.bufferedFrames = 0;
     this.buffering = true;
     this.port.onmessage = (evt) => this.procMessage(evt);
-    this.channelOpen = true;
   }
 
   procMessage(evt) {
-    if (evt.data.length == 1) {
-      if (evt.data[0] == SPEECH_STARTED) {
-        console.log("got speech started event");
-        this.channelOpen = false;
-        this.buffer.fill(0);
-      } else if (evt.data[0] == SPEECH_ENDED) {
-        console.log("got speech stopped event")
-        this.channelOpen = true;
-      }
+    if (evt.data.length === 1
+     && evt.data[0] === SPEECH_STARTED) {
+      console.log("filling buffer with 0's");
+      this.buffer.fill(0);
       return;
     }
-
-    if (!this.channelOpen) return;
-
     const pcm16 = evt.data;
     let dataLength = pcm16.length;
-    console.log("incoming data length:", dataLength);
     const availableLength = BUFFER_SIZE - this.bufferedFrames;
 
     if (dataLength > availableLength) {
@@ -54,7 +44,7 @@ class InboundResampler extends AudioWorkletProcessor {
     const output = outputs[0];
     const channelCount = output.length;
     let sampleFrames = output[0].length;
-
+    
     if (this.bufferedFrames >= BUFFERING_CAP) {
       this.buffering = false;
     }

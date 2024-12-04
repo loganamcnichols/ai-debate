@@ -114,9 +114,12 @@ type ConversationItemDelete struct {
 }
 
 // ** Response **
-// response.create
+// https://platform.openai.com/docs/api-reference/realtime-client-events/response/create
 type ResponseCreate struct {
-	Type ClientEventType `json:"type"`
+	Type     ClientEventType `json:"type"`
+	Response struct {
+		Instructions string `json:"instructions"`
+	} `json:"response"`
 }
 
 // response.cancel

@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	aai "github.com/AssemblyAI/assemblyai-go-sdk"
 	Realtime "github.com/loganamcnichols/ai-debate/realtime"
 
 	// "github.com/ebitengine/oto/v3"
@@ -86,9 +87,10 @@ var (
 )
 
 const (
-	SPEECH_STARTED byte = 0
-	SPEECH_ENDED   byte = 1
-	AUDIO_RECV     byte = 2
+	SPEECH_STARTED   byte = 0
+	SPEECH_ENDED     byte = 1
+	AUDIO_RECV       byte = 2
+	OPENING_ARGS_END byte = 3
 )
 
 type BotSelection string
@@ -925,8 +927,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		var secondBotName string
 
 		if innovateNext {
-			firstPromptFile = "PRO_INNOVATION_PROMPT.txt"
-			secondPromptFile = "PRO_SAFETY_PROMPT.txt"
+			firstPromptFile = "INNOVATE_BOT_INSTRUCTIONS.txt"
+			secondPromptFile = "SAFETY_BOT_INSTRUCTIONS.txt"
 
 			firstBotName = "InnovateBot"
 			secondBotName = "SafetyBot"
@@ -936,8 +938,8 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 
 		} else {
-			firstPromptFile = "PRO_SAFETY_PROMPT.txt"
-			secondPromptFile = "PRO_INNOVATION_PROMPT.txt"
+			firstPromptFile = "SAFETY_BOT_INSTRUCTIONS.txt"
+			secondPromptFile = "INNOVATE_BOT_INSTRUCTIONS.txt"
 
 			firstBotName = "SafetyBot"
 			secondBotName = "InnovateBot"
@@ -1632,77 +1634,11 @@ func initBotCons() (connModerator, connSafety, connInnovate *websocket.Conn, err
 	return connModerator, connInnovate, connSafety, err
 }
 
-// func pcmToWAVReader(pcmData []byte, sampleRate int, numChannels int) io.Reader {
-// 	// Calculate sizes
-// 	dataSize := len(pcmData)
-// 	fileSize := dataSize + 36
-
-// 	// Create header bytes
-// 	buf := new(bytes.Buffer)
-
-// 	// Write header elements
-// 	binary.Write(buf, binary.LittleEndian, [4]byte{'R', 'I', 'F', 'F'})
-// 	binary.Write(buf, binary.LittleEndian, uint32(fileSize))
-// 	binary.Write(buf, binary.LittleEndian, [4]byte{'W', 'A', 'V', 'E'})
-// 	binary.Write(buf, binary.LittleEndian, [4]byte{'f', 'm', 't', ' '})
-// 	binary.Write(buf, binary.LittleEndian, uint32(16))                       // fmt chunk size
-// 	binary.Write(buf, binary.LittleEndian, uint16(1))                        // audio format (PCM)
-// 	binary.Write(buf, binary.LittleEndian, uint16(numChannels))              // channels
-// 	binary.Write(buf, binary.LittleEndian, uint32(sampleRate))               // sample rate
-// 	binary.Write(buf, binary.LittleEndian, uint32(sampleRate*numChannels*2)) // byte rate
-// 	binary.Write(buf, binary.LittleEndian, uint16(numChannels*2))            // block align
-// 	binary.Write(buf, binary.LittleEndian, uint16(16))                       // bits per sample
-// 	binary.Write(buf, binary.LittleEndian, [4]byte{'d', 'a', 't', 'a'})
-// 	binary.Write(buf, binary.LittleEndian, uint32(dataSize))
-
-// 	// Return a reader that combines header and PCM data
-// 	return io.MultiReader(buf, bytes.NewReader(pcmData))
-// }
-
-// func writeAudio(
-// 	evt Realtime.ResponseAudioDelta,
-// 	conn *websocket.Conn,
-// 	clientSampleRate,
-// 	serverSampleRate int) error {
-
-// 	pcm16, err := base64.StdEncoding.DecodeString(evt.Delta)
-// 	if err != nil {
-// 		return fmt.Errorf("unable to decode base64 string: %v", err)
-// 	}
-
-// 	log.Println("pcm16 data length:", len(pcm16))
-
-// 	wsw, err := conn.NextWriter(websocket.BinaryMessage)
-// 	if err != nil {
-// 		return fmt.Errorf("unable to create next writer: %v", err)
-// 	}
-
-// 	res, err := resample.New(
-// 		wsw,
-// 		float64(serverSampleRate),
-// 		float64(clientSampleRate),
-// 		1, resample.I16, resample.MediumQ,
-// 	)
-
-// 	if err != nil {
-// 		return fmt.Errorf("unable to resample audio: %v", err)
-// 	}
-
-// 	_, err = res.Write(pcm16)
-// 	if err != nil {
-// 		return fmt.Errorf("unable to write out the pcm audio: %v", err)
-// 	}
-
-// 	res.Close()
-// 	wsw.Close()
-
-// 	return nil
-// }
-
-func processRealtimeAudio(b64Audio string, outClient chan<- []byte, clientSampleRate int) error {
+func processAudioChunk(b64Audio string, clientSampleRate int) ([]byte, error) {
+	var out []byte
 	pcmAudio, err := base64.StdEncoding.DecodeString(b64Audio)
 	if err != nil {
-		return fmt.Errorf("unable to decode string: %v", err)
+		return out, fmt.Errorf("unable to decode string: %v", err)
 	}
 
 	var buf bytes.Buffer
@@ -1712,15 +1648,25 @@ func processRealtimeAudio(b64Audio string, outClient chan<- []byte, clientSample
 		1, resample.I16, resample.HighQ)
 
 	if err != nil {
-		return fmt.Errorf("unable to create audio resampler: %v", err)
+		return out, fmt.Errorf("unable to create audio resampler: %v", err)
 	}
 
 	_, err = resampler.Write(pcmAudio)
 	if err != nil {
-		return fmt.Errorf("unable to resample audio")
+		return out, fmt.Errorf("unable to resample audio")
 	}
 
-	outClient <- buf.Bytes()
+	out = buf.Bytes()
+
+	return out, nil
+}
+
+func processRealtimeAudio(b64Audio string, outClient chan<- []byte, clientSampleRate int) error {
+	out, err := processAudioChunk(b64Audio, clientSampleRate)
+	if err != nil {
+		return err
+	}
+	outClient <- out
 	return nil
 }
 
@@ -1989,8 +1935,7 @@ func realtimeMessageHandler(msgStream <-chan []byte,
 }
 
 func onClientAudio(data []byte, chatState ChatState,
-	outModerator, outInnovate, outSafety chan<- []byte) error {
-	log.Println("on client audio reached")
+	outToTranscribe, outModerator, outInnovate, outSafety chan<- []byte) error {
 	var buf bytes.Buffer
 	res, err := resample.New(&buf,
 		float64(chatState.clientSampleRate),
@@ -2000,15 +1945,14 @@ func onClientAudio(data []byte, chatState ChatState,
 		log.Printf("unable to create resampler: %v\n", err)
 	}
 
-	n, err := res.Write(data)
+	_, err = res.Write(data)
 	res.Close()
 	if err != nil {
 		return fmt.Errorf("unable to write data to resampler")
 	}
 
-	log.Println(n)
-
 	resampled := buf.Bytes()
+
 	encoded := base64.StdEncoding.EncodeToString(resampled)
 
 	audioAppend := Realtime.InputAudioBufferAppend{
@@ -2024,7 +1968,7 @@ func onClientAudio(data []byte, chatState ChatState,
 	outModerator <- msg
 	outInnovate <- msg
 	outSafety <- msg
-
+	outToTranscribe <- resampled
 	return nil
 }
 
@@ -2070,7 +2014,6 @@ func writeRealtimeWS(conn *websocket.Conn, inStream <-chan []byte) {
 				log.Printf(unmarshalErrTmpl, evt.Type, err)
 				continue
 			}
-			log.Println("appending audio buffer")
 			err = conn.WriteJSON(evt)
 			if err != nil {
 				log.Printf(writeJSONErrTmpl, evt.Type, err)
@@ -2241,9 +2184,8 @@ func onSpeechEnded(outModerator, outInnovate, outSafety chan<- []byte) error {
 }
 
 func handleClientMsg(msg []byte, state ChatState, outState chan<- ChatState,
-	outModerator, outInnovate, outSafety chan<- []byte) error {
+	outToTranscribe, outModerator, outInnovate, outSafety chan<- []byte) error {
 	msgType, msg := msg[0], msg[1:]
-	log.Println("message type:", msgType)
 	switch msgType {
 	case SPEECH_STARTED:
 		err := onSpeechStarted(msg, state, outModerator, outInnovate, outSafety)
@@ -2265,7 +2207,7 @@ func handleClientMsg(msg []byte, state ChatState, outState chan<- ChatState,
 		outState <- state
 		return nil
 	case AUDIO_RECV:
-		return onClientAudio(msg, state, outModerator, outInnovate, outSafety)
+		return onClientAudio(msg, state, outToTranscribe, outModerator, outInnovate, outSafety)
 	default:
 		return fmt.Errorf("unrecognized type: %d", msgType)
 	}
@@ -2273,14 +2215,14 @@ func handleClientMsg(msg []byte, state ChatState, outState chan<- ChatState,
 
 func clientMessageHandler(msgStream <-chan []byte,
 	stateInStream <-chan ChatState, stateOutStream chan<- ChatState,
-	outModerator, outInnovate, outSafety chan<- []byte) {
+	outToTranscribe, outModerator, outInnovate, outSafety chan<- []byte) {
 	var state = ChatState{
 		clientSampleRate: 44_000,
 	}
 	for {
 		select {
 		case msg := <-msgStream:
-			handleClientMsg(msg, state, stateOutStream, outModerator, outInnovate, outSafety)
+			handleClientMsg(msg, state, stateOutStream, outToTranscribe, outModerator, outInnovate, outSafety)
 		case newState := <-stateInStream:
 			state = newState
 		}
@@ -2293,6 +2235,153 @@ func writeClientWS(conn *websocket.Conn, inStream <-chan []byte) {
 		if err != nil {
 			log.Printf("unable to write to websocket: %v\n", err)
 		}
+	}
+}
+
+func waitForReply(realtimeSocket, clientSocket *websocket.Conn, clientSampleRate int) error {
+	for {
+		_, data, err := realtimeSocket.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("unable to read websocket: %v", err)
+		}
+
+		var evt Realtime.ServerEvent
+		err = json.Unmarshal(data, &evt)
+		if err != nil {
+			return fmt.Errorf("unable to unmarshal server event: %v", err)
+		}
+
+		if evt.Type == Realtime.RESPONSE_AUDIO_DELTA {
+			var evt Realtime.ResponseAudioDelta
+			err = json.Unmarshal(data, &evt)
+			if err != nil {
+				return fmt.Errorf("unable to unmarshal audio delta: %v", err)
+			}
+
+			audio, err := processAudioChunk(evt.Delta, clientSampleRate)
+			if err != nil {
+				return err
+			}
+
+			err = clientSocket.WriteMessage(websocket.BinaryMessage, audio)
+			if err != nil {
+				return fmt.Errorf("unable to write to socket: %v", err)
+			}
+		}
+
+		if evt.Type == Realtime.RESPONSE_DONE {
+			return nil
+		}
+	}
+}
+
+func handleOpeningMessages(connModerator, connInnovate, connSafety, connClient *websocket.Conn, clientSampleRate int) error {
+	// // for the duration of the function, clear incoming audio
+	// filename := "MODERATOR_INTRO_MSG.txt"
+	// openingArgument, err := os.ReadFile(filename)
+	// if err != nil {
+	// 	return fmt.Errorf("unable to read %s: %v", filename, err)
+	// }
+
+	// err = connModerator.WriteJSON(Realtime.ResponseCreate{
+	// 	Type: Realtime.RESPONSE_CREATE,
+	// 	Response: struct {
+	// 		Instructions string `json:"instructions"`
+	// 	}{
+	// 		Instructions: fmt.Sprintf("Please respond with the following: \"%s\"", openingArgument),
+	// 	},
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("unable to write to websocket: %v", err)
+	// }
+
+	// err = waitForReply(connModerator, connClient, clientSampleRate)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// filename = "SAFETY_BOT_OPENING_ARGUMENT.txt"
+	// openingArgument, err = os.ReadFile(filename)
+	// if err != nil {
+	// 	return fmt.Errorf("unable to read %s: %v", filename, err)
+	// }
+
+	// err = connSafety.WriteJSON(Realtime.ResponseCreate{
+	// 	Type: Realtime.RESPONSE_CREATE,
+	// 	Response: struct {
+	// 		Instructions string `json:"instructions"`
+	// 	}{
+	// 		Instructions: fmt.Sprintf("Please respond with the following: \"%s\"", openingArgument),
+	// 	},
+	// })
+	// if err != nil {
+	// 	return fmt.Errorf("unable to write to websocket: %v", err)
+	// }
+
+	// err = waitForReply(connSafety, connClient, clientSampleRate)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// filename = "INNOVATE_BOT_OPENING_ARGUMENT.txt"
+	// openingArgument, err = os.ReadFile(filename)
+	// if err != nil {
+	// 	return fmt.Errorf("unable to read file %s: %v", filename, err)
+	// }
+
+	// err = connInnovate.WriteJSON(Realtime.ResponseCreate{
+	// 	Type: Realtime.RESPONSE_CREATE,
+	// 	Response: struct {
+	// 		Instructions string `json:"instructions"`
+	// 	}{
+	// 		Instructions: fmt.Sprintf("Please respond with the following: \"%s\"", openingArgument),
+	// 	},
+	// })
+
+	// if err != nil {
+	// 	return fmt.Errorf("unable to write to websocket: %v", err)
+	// }
+
+	// err = waitForReply(connInnovate, connClient, clientSampleRate)
+	// if err != nil {
+	// 	return err
+	// }
+	buf := make([]byte, 2)
+	binary.LittleEndian.PutUint16(buf, uint16(OPENING_ARGS_END))
+	log.Println("sending 3")
+	err := connClient.WriteMessage(websocket.BinaryMessage, buf)
+	return err
+}
+
+func transcribe(client *aai.RealTimeClient, audioIn <-chan []byte) error {
+	for data := range audioIn {
+		err := client.Send(context.Background(), data)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func bufferAudio(audioOut chan<- []byte, audioIn <-chan []byte) {
+	bufLen := 6400
+	buffer := make([]byte, bufLen)
+	offset := 0
+
+	for data := range audioIn {
+		n := copy(buffer[offset:], data)
+		offset += n
+		if offset == bufLen {
+			audioOut <- buffer
+			n := copy(buffer, data[n:])
+			offset = n
+		}
+	}
+}
+
+func readTranscript(transcriptOut <-chan string) {
+	for data := range transcriptOut {
+		log.Println(data)
 	}
 }
 
@@ -2319,6 +2408,12 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	defer connInnovate.Close()
 	defer connSafety.Close()
 
+	// handle intro messages
+	err = handleOpeningMessages(connModerator, connInnovate, connSafety, connClient, clientSampleRate)
+	if err != nil {
+		log.Println(err)
+	}
+
 	// Create incoming audio channels
 	inFromModerator := make(chan []byte)
 	inFromInnovate := make(chan []byte)
@@ -2332,6 +2427,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	go readWS(connClient, inFromClient)
 
 	// Create outgoing audio/client events
+	outToTranscribe := make(chan []byte)
 	outToModerator := make(chan []byte)
 	outToInnovate := make(chan []byte)
 	outToSafety := make(chan []byte)
@@ -2357,7 +2453,7 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	go realtimeMessageHandler(inFromModerator, stateInModerator, stateOutModerator, outToClient, outToInnovate, outToSafety)
 	go realtimeMessageHandler(inFromInnovate, stateInInnovate, stateOutInnovate, outToClient, outToModerator, outToSafety)
 	go realtimeMessageHandler(inFromSafety, stateInSafety, stateOutSafety, outToClient, outToModerator, outToInnovate)
-	go clientMessageHandler(inFromClient, stateInClient, stateOutClient, outToModerator, outToInnovate, outToSafety)
+	go clientMessageHandler(inFromClient, stateInClient, stateOutClient, outToTranscribe, outToModerator, outToInnovate, outToSafety)
 
 	chatState := ChatState{
 		clientSampleRate: clientSampleRate,

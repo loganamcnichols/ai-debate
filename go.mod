@@ -13,4 +13,10 @@ require (
 
 require github.com/gorilla/websocket v1.5.3
 
-require github.com/zaf/resample v1.5.0 // indirect
+require (
+	github.com/AssemblyAI/assemblyai-go-sdk v1.9.0 // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/coder/websocket v1.8.12 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
+	github.com/zaf/resample v1.5.0 // indirect
+)
