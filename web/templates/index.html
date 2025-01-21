@@ -9,15 +9,42 @@
   <script src="static/js/sse.min.js"></script>
   <script src="https://unpkg.com/hyperscript.org@0.9.12" defer></script>
 </head>
-<body hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}" 
+<body hx-ext="sse" sse-connect="/chat?response-id={{ .ResponseID }}&survey-id={{ .SurveyID }}" 
       sse-close="close" hx-on::sse-close="console.log('sse closed');">
   <data sse-swap="keep-alive" hx-swap="none"></data>
   <data id="ticker" hx-target="body" hx-get="/survey?response-id={{ .ResponseID }}&page=1" hx-trigger="every {{ .ChatTime }}m"></data>
-  <div>
-    Time until survey
-    <div id="countdown-timer">
+  <header style="display: flex;justify-content: space-between;">
+    <div>
+      Time until survey
+      <div id="countdown-timer">
+      </div>
     </div>
-  </div>
+    {{ block "topic-list" 0 }}
+      <ol id="topic-list" sse-swap="update-list" hx-swap="outerHTML">
+        <li>
+      {{ if eq . 1  }}
+            <b style="font-size:1.4rem">TOPIC ONE</b>
+      {{ else }}
+            <p>TOPIC ONE</p>
+      {{ end }}
+        </li>
+        <li>
+      {{ if eq . 2 }}
+            <b style="font-size:1.4rem">TOPIC TWO</b>
+      {{ else }}
+            <p>TOPIC TWO</p>
+      {{ end }}
+        </li>
+        <li>
+      {{ if eq . 3 }}
+            <b style="font-size:1.4rem">TOPIC THREE</b>
+      {{ else }}
+            <p>TOPIC THREE</p>
+      {{ end }}
+      </li>
+    </ol>
+    {{ end }}
+  </header>
   <main hx-on::sse-message="if (event.detail.type === 'chat-msg') 
                                      setTimeout(() => { this.scrollTo({ top: this.scrollHeight, behavior: 'smooth' });}, 10); 
                             else this.scrollTo({ top: this.scrollHeight, behavior: 'auto' });">

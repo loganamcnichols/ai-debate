@@ -69,6 +69,8 @@ var (
 	BLOCKED_VENDOR_TEMPLATE_ID = 1839
 )
 
+const DEFAULT_CHAT_TIME = 10
+
 type Qualification struct {
 	Name       string
 	QuestionID int
@@ -569,8 +571,8 @@ func postTemplate(w http.ResponseWriter, eventName string, tmplName string, data
 	return nil
 }
 
-func streamIntroMsgs(w http.ResponseWriter) error {
-	err := postTemplate(w, "intro-msg", "intro-msg-1", nil)
+func streamIntroMsgs(w http.ResponseWriter, chatTime int) error {
+	err := postTemplate(w, "intro-msg", "intro-msg-1", struct{ ChatTime int }{ChatTime: chatTime})
 	if err != nil {
 		return fmt.Errorf("unable to parse template 'intro-msg-1': %v", err)
 	}
@@ -585,62 +587,19 @@ func streamIntroMsgs(w http.ResponseWriter) error {
 		return fmt.Errorf("unable to parse template 'intro-msg-3': %v", err)
 	}
 	time.Sleep(2 * time.Second)
+	topicTime := chatTime / 3
+	err = postTemplate(w, "intro-msg", "intro-msg-4", struct{ TopicTime int }{TopicTime: topicTime})
+	if err != nil {
+		return fmt.Errorf("unable to parse template 'intro-msg-4': %v", err)
+	}
+	time.Sleep(2 * time.Second)
+	err = postTemplate(w, "intro-msg", "intro-msg-5", nil)
+	if err != nil {
+		return fmt.Errorf("unable to parse template 'intro-msg-5': %v", err)
+	}
+	time.Sleep(2 * time.Second)
 	return nil
 }
-
-// func formatTemplateMessages(responseID uuid.UUID, innovateFirst bool) ([]ChatMessage, error) {
-// 	messages := []ChatMessage{}
-// 	rows, err := chatHistoryStmt.Query(responseID)
-// 	if err != nil {
-// 		return messages, fmt.Errorf("failed to execute chatHistoryStmt: %v", err)
-// 	}
-// 	defer rows.Close()
-// 	var nextRow QuestionRow
-// 	for rows.Next() {
-// 		if err := nextRow.Scan(rows); err != nil {
-// 			return messages, err
-// 		}
-// 		if innovateFirst {
-// 			messages = append(messages, []ChatMessage{
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "user",
-// 					Content:    nextRow.UserMsg,
-// 				},
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "InnovateBot",
-// 					Content:    nextRow.InnovationMsg,
-// 				},
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "SafetyBot",
-// 					Content:    nextRow.SafetyMsg,
-// 				},
-// 			}...)
-// 		} else {
-// 			messages = append(messages, []ChatMessage{
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "user",
-// 					Content:    nextRow.UserMsg,
-// 				},
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "SafetyBot",
-// 					Content:    nextRow.SafetyMsg,
-// 				},
-// 				{
-// 					QuestionID: nextRow.QuestionID,
-// 					Role:       "InnovateBot",
-// 					Content:    nextRow.InnovationMsg,
-// 				},
-// 			}...)
-// 		}
-// 		innovateFirst = !innovateFirst
-// 	}
-// 	return messages, nil
-// }
 
 func formatMessages(responseID uuid.UUID) ([]openai.ChatCompletionMessage, bool, error) {
 	messages := []openai.ChatCompletionMessage{{}}
@@ -740,19 +699,37 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// Ensure the writer supports flushing
-	idParam := r.URL.Query().Get("response-id")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
-	responseID, err := uuid.Parse(idParam)
+	// Ensure the writer supports flushing
+	responseIDParam := r.URL.Query().Get("response-id")
+	surveyIDParam := r.URL.Query().Get("survey-id")
+
+	responseID, err := uuid.Parse(responseIDParam)
 	if err != nil {
-		log.Printf("unable to parse resopnse-id %s: %v\n", idParam, err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		log.Printf("invalid response-id parameter %s: %v\n", responseIDParam, err)
+		http.Error(w, "invalid response-id parameter", http.StatusBadRequest)
 		return
+	}
+
+	chatTime := 10
+	if surveyIDParam != "" {
+		surveyID, err := uuid.Parse(surveyIDParam)
+		if err != nil {
+			log.Printf("unable to parse survey-id %s: %v\n", surveyIDParam, err)
+			http.Error(w, "invalid survey-id parameter", http.StatusBadRequest)
+			return
+		}
+		err = chatTimeQueryStmt.QueryRow(surveyID).Scan(&chatTime)
+		if err != nil {
+			log.Printf("failed to get chat time: %v", err)
+			http.Error(w, "internal server serror", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	var chatHistoryLen int
@@ -766,17 +743,20 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	chatMap.Delete(responseID)
 	userChannel := make(chan string, 1)
 	if chatHistoryLen == 0 {
-		userChannel <- "Opening argument"
-		if err = streamIntroMsgs(w); err != nil {
+		userChannel <- "TOPIC ONE PLACEHOLDER"
+		if err = streamIntroMsgs(w, chatTime); err != nil {
 			log.Printf("failed to load intro msgs: %v\n", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
+		postTemplate(w, "update-list", "topic-list", 1)
 	}
 	chatMap.Store(responseID, userChannel)
 
 	inactiveTimer := time.NewTimer(3 * time.Minute)
 	keepAliveTicker := time.NewTicker(20 * time.Second)
+	secondSectionStart := time.NewTimer(3 * time.Second)
+	thirdSectionStart := time.NewTimer(6 * time.Second)
 
 	go func() {
 		for {
@@ -791,7 +771,12 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 			case <-inactiveTimer.C:
 				fmt.Fprintf(w, "event: inactive\ndata: \n\n")
 				flusher.Flush()
-
+			case <-secondSectionStart.C:
+				postTemplate(w, "update-list", "topic-list", 2)
+				userChannel <- "TOPIC TWO PLACEHOLDER"
+			case <-thirdSectionStart.C:
+				postTemplate(w, "update-list", "topic-list", 3)
+				userChannel <- "TOPIC THREE PLACEHOLDER"
 				_, err := markIncomplete.Exec(responseID)
 				if err != nil {
 					log.Printf("failed to execute markIncomplete stmt %v\n", err)
@@ -801,7 +786,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for userMsg := range userChannel {
-		print("in user msg loop")
 		inactiveTimer.Reset(3 * time.Minute)
 		messages, innovateNext, err := formatMessages(responseID)
 		if err != nil {
@@ -1356,10 +1340,12 @@ func handleLucidIndex(w http.ResponseWriter, r *http.Request) {
 	var data = struct {
 		QuestionRows []ChatMessage
 		ResponseID   string
+		SurveyID     string
 		ChatTime     int
 	}{
 		QuestionRows: []ChatMessage{},
 		ResponseID:   id.String(),
+		SurveyID:     surveyID.String(),
 		ChatTime:     chatTime,
 	}
 
@@ -1384,11 +1370,13 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	var data = struct {
 		QuestionRows []ChatMessage
 		ResponseID   string
+		SurveyID     string
 		ChatTime     int
 	}{
 		QuestionRows: []ChatMessage{},
 		ResponseID:   responseID.String(),
-		ChatTime:     10,
+		SurveyID:     "",
+		ChatTime:     DEFAULT_CHAT_TIME,
 	}
 
 	err = tmpls.ExecuteTemplate(w, "index.html", data)

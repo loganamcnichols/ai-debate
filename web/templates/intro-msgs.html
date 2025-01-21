@@ -1,15 +1,25 @@
 {{ define "intro-msg-1" }}
     <p class="fade-in" hx-on::after-swap="this.classList.add('visible')">
-      You will have the opportunity for the next 5 minutes to engage in a discussion with two LLMs.
+      You will have the opportunity for the next {{ .ChatTime }} minutes to engage in a discussion with two LLMs.
     </p>
 {{ end }}
-{{ define "intro-msg-2" }}
+{{ define "intro-msg-2"}}
     <p class="fade-in" hx-on::after-swap="this.classList.add('visible')">
-      One will make the strongest arguments for to prioritize greater <strong>safety</strong> in AI development.
+      One will make the strongest arguments to prioritize greater <strong>safety</strong> in AI development.
     </p>
 {{ end }}
 {{ define "intro-msg-3" }}
     <p class="fade-in" hx-on::after-swap="this.classList.add('visible')">
-      The other will make the strongest arguments to prioritize greater <strong>innovation</strong> in AI development.
+      The other will make the strongest arguments to prioritize greater <strong>caution</strong> in AI development.
+    </p>
+{{ end }}
+{{ define "intro-msg-4" }}
+    <p class="fade-in" hx-on::after-swap="this.classList.add('visible')">
+      The conversation will cover three sections: <b>TOPIC ONE</b>, <b>TOPIC TWO</b> and <b>TOPIC THREE</b>. Each lasting {{ .TopicTime  }} minutes.
+    </p>
+{{ end }}
+{{ define "intro-msg-5" }}
+    <p class="fade-in" hx-on::after-swap="this.classList.add('visible')">
+      You must stay engaged in the conversation to qualify!
     </p>
 {{ end }}
