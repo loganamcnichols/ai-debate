@@ -993,11 +993,7 @@ func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID str
 	} else {
 		completeURL := *COMPLETE_URL
 		params := completeURL.Query()
-		params.Add("RIS", "10")
 		params.Add("RID", responseID)
-		completeURL.RawQuery = params.Encode()
-		hash := generateHash(completeURL.String(), os.Getenv("COMPLETE_KEY"))
-		params.Add("hash", hash)
 		completeURL.RawQuery = params.Encode()
 		w.Header().Set("HX-Redirect", completeURL.String())
 	}
@@ -1363,7 +1359,7 @@ func initURLs() {
 	if err != nil {
 		log.Printf("unable to parse 'https://api.samplicio.us/ExchangeTemplates/ApplyToSurvey'")
 	}
-	COMPLETE_URL, err = url.Parse("https://www.samplicio.us/router/ClientCallBack.aspx")
+	COMPLETE_URL, err = url.Parse("https://notch.insights.supply/cb?token=0433a930-10c5-46e0-b3e9-b99dfce1cdb4")
 	if err != nil {
 		log.Printf("unable to parse 'https://www.samplicio.us/router/ClientCallBack.aspx'")
 	}
