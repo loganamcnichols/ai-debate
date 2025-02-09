@@ -67,10 +67,19 @@ footer
   z-index: 1000;
 }
 
+ol {
+  list-style-position: inside;
+}
+
+#topic-list {
+  width: 70%;
+  padding: 1rem 0rem 1rem 0rem;
+}
+
 @media screen and (max-width: 1000px) { 
   body 
   { 
-    padding: 5vh 5% 25vh 5%;
+    padding: 5vh 5% 30vh 5%;
   }
   footer 
   {

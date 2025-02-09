@@ -32,6 +32,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
+const AI_DEBATE_PROJECT_ID = 27337152
+
 var TEMPLATE_PARAMS = url.Values{
 	"responseID":   []string{"[%RID%]"},
 	"panelistID":   []string{"[%PID%]"},
@@ -593,11 +595,6 @@ func streamIntroMsgs(w http.ResponseWriter, chatTime int) error {
 		return fmt.Errorf("unable to parse template 'intro-msg-4': %v", err)
 	}
 	time.Sleep(2 * time.Second)
-	err = postTemplate(w, "intro-msg", "intro-msg-5", nil)
-	if err != nil {
-		return fmt.Errorf("unable to parse template 'intro-msg-5': %v", err)
-	}
-	time.Sleep(2 * time.Second)
 	return nil
 }
 
@@ -743,7 +740,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	chatMap.Delete(responseID)
 	userChannel := make(chan string, 1)
 	if chatHistoryLen == 0 {
-		userChannel <- "TOPIC ONE PLACEHOLDER"
+		userChannel <- "Regulation vs. Deregulation in AI Development"
 		if err = streamIntroMsgs(w, chatTime); err != nil {
 			log.Printf("failed to load intro msgs: %v\n", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -753,10 +750,14 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	chatMap.Store(responseID, userChannel)
 
+	sectionDuration := time.Duration(60 * chatTime / 30) * time.Second
+
+
 	inactiveTimer := time.NewTimer(3 * time.Minute)
 	keepAliveTicker := time.NewTicker(20 * time.Second)
-	secondSectionStart := time.NewTimer(3 * time.Second)
-	thirdSectionStart := time.NewTimer(6 * time.Second)
+
+	secondSectionStart := time.NewTimer(sectionDuration)
+	thirdSectionStart := time.NewTimer(2 * sectionDuration)
 
 	go func() {
 		for {
@@ -773,10 +774,10 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			case <-secondSectionStart.C:
 				postTemplate(w, "update-list", "topic-list", 2)
-				userChannel <- "TOPIC TWO PLACEHOLDER"
+				userChannel <- "Economic Transformation: Job Creation vs. Displacement"
 			case <-thirdSectionStart.C:
 				postTemplate(w, "update-list", "topic-list", 3)
-				userChannel <- "TOPIC THREE PLACEHOLDER"
+				userChannel <- "Developing Super-Human General-Purpose AI"
 				_, err := markIncomplete.Exec(responseID)
 				if err != nil {
 					log.Printf("failed to execute markIncomplete stmt %v\n", err)
@@ -879,9 +880,10 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		}
 
 		req := openai.ChatCompletionRequest{
-			Model:    openai.GPT4oMini20240718,
+			Model:    openai.O3Mini,
 			Messages: messages,
 			Stream:   true,
+			ReasoningEffort: "low",
 		}
 
 		stream1, err := client.CreateChatCompletionStream(context.Background(), req)
@@ -1079,46 +1081,6 @@ func handleSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func createProject(name string) (int, error) {
-	projectData := struct {
-		Name     string `json:"name"`
-		ClientID int    `json:"client_id"`
-	}{
-		Name:     name,
-		ClientID: SURVEYOR_CLIENT_ID,
-	}
-	data, err := json.Marshal(projectData)
-	if err != nil {
-		return 0, fmt.Errorf("unable to marshal %v: %v", projectData, err)
-	}
-	req, err := http.NewRequest("POST", PROJECT_ENDPOINT.String(), bytes.NewBuffer(data))
-	if err != nil {
-		return 0, fmt.Errorf("unable to make request for %s with %v: %v", PROJECT_ENDPOINT, data, err)
-	}
-
-	addLucidHeaders(req)
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, fmt.Errorf("error sending request: %v", err)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, fmt.Errorf("unable to read response body: %v", err)
-	}
-
-	var respTmpl struct {
-		ID int `json:"id"`
-	}
-	err = json.Unmarshal(body, &respTmpl)
-	if err != nil {
-		return 0, fmt.Errorf("unable to unmarshal %s: %v", body, err)
-	}
-
-	return respTmpl.ID, nil
-}
 
 func addLucidHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
@@ -1230,14 +1192,7 @@ func handleSurveyDeploy(w http.ResponseWriter, r *http.Request) {
 	surveyName := fmt.Sprintf("AI Debate %s", time.Now().Format(time.DateTime))
 	var lucidID *int
 	if lucidLaunch {
-		projectID, err := createProject(surveyName)
-		if err != nil {
-			log.Println(err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		lucidID, err = createSurvey(surveyName, projectID, prescreens, chatTime, surveyID)
+		lucidID, err = createSurvey(surveyName, AI_DEBATE_PROJECT_ID, prescreens, chatTime, surveyID)
 		if err != nil {
 			log.Println(err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
