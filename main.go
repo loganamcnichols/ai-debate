@@ -3,10 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha1"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,7 +68,7 @@ var (
 	BLOCKED_VENDOR_TEMPLATE_ID = 1839
 )
 
-const DEFAULT_CHAT_TIME = 10
+const DEFAULT_CHAT_TIME = 15
 
 type Qualification struct {
 	Name       string
@@ -713,7 +710,7 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chatTime := 10
+	var chatTime = DEFAULT_CHAT_TIME
 	if surveyIDParam != "" {
 		surveyID, err := uuid.Parse(surveyIDParam)
 		if err != nil {
@@ -750,8 +747,9 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	chatMap.Store(responseID, userChannel)
 
-	sectionDuration := time.Duration(60 * chatTime / 30) * time.Second
+	sectionDuration := time.Duration(60 * chatTime / 3) * time.Second
 
+	log.Println("section duration", sectionDuration)
 
 	inactiveTimer := time.NewTimer(3 * time.Minute)
 	keepAliveTicker := time.NewTicker(20 * time.Second)
@@ -766,7 +764,6 @@ func streamResponse(w http.ResponseWriter, r *http.Request) {
 				chatMap.Delete(responseID)
 				return
 			case <-keepAliveTicker.C:
-				log.Printf("hit keep alive ticker")
 				fmt.Fprintf(w, "event: keep-alive\ndata: \n\n")
 				flusher.Flush()
 			case <-inactiveTimer.C:
@@ -963,24 +960,6 @@ func promptCopy() []string {
 	dst := make([]string, len(prompts))
 	copy(dst, prompts)
 	return dst
-}
-
-func createHmacSHA1(message, secret string) []byte {
-	key := []byte(secret)
-	h := hmac.New(sha1.New, key)
-	h.Write([]byte(message))
-	return h.Sum(nil)
-}
-
-func generateHash(url, key string) string {
-	rawHash := createHmacSHA1(url, key)
-	base64Hash := base64.StdEncoding.EncodeToString(rawHash)
-
-	// Replace '+' with '-', '/' with '_', and remove '='
-	hash := strings.NewReplacer("+", "-", "/", "_").Replace(base64Hash)
-	hash = strings.TrimRight(hash, "=")
-
-	return hash
 }
 
 func completeSurvey(w http.ResponseWriter, survey SurveyResponse, responseID string) {
