@@ -72,7 +72,7 @@ ol {
 }
 
 #topic-list {
-  width: 70%;
+  flex-grow:1;
   padding: 1rem 0rem 1rem 0rem;
 }
 
@@ -284,21 +284,13 @@ textarea {
 }
 
 
-/* Sticky Header Styling */
-#sticky-header {
-    box-sizing: border-box;
-    top: 0;
-    left: 0;
-    width: 100%;
-    color: #fff;
+@media screen and (min-width: 1000px) {
+  header {
     display: flex;
-    padding: 2rem 0rem 2rem 0rem;
     align-items: center;
-    z-index: 1000; /* Ensure the header stays on top */
-    justify-content: space-between; /* Align items to left and right */
-    text-align: center;
+    justify-content: space-between;
+  }
 }
-
 
 #countdown-timer span {
     text-align: center;
