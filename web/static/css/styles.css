@@ -8,6 +8,8 @@
 
 
 html, body {
+  padding: 0;
+  margin: 0;
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -79,7 +81,7 @@ ol {
 @media screen and (max-width: 1000px) { 
   body 
   { 
-    padding: 5vh 5% 30vh 5%;
+    padding: 2% 5% 30vh 5%;
   }
   footer 
   {
@@ -90,7 +92,7 @@ ol {
 {
   body
   {
-    padding: 5vh 25% 18vh 25%; 
+    padding: 2% 25% 18vh 25%; 
   }
   footer 
   {
@@ -289,6 +291,11 @@ textarea {
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+}
+@media screen and (max-width: 1000px) {
+  header {
+    font-size: 14px;
   }
 }
 
